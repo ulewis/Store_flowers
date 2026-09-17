@@ -1,0 +1,50 @@
+name: Backend smoke test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/config.js'
+      - '.github/workflows/backend-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read API URL
+        shell: bash
+        run: |
+          API_URL=$(grep "API_URL:" assets/config.js | sed -E "s/.*API_URL: '([^']+)'.*/\1/")
+          if [ -z "$API_URL" ]; then
+            echo "API_URL no configurada"
+            exit 1
+          fi
+          echo "API_URL=$API_URL" >> "$GITHUB_ENV"
+
+      - name: Health check
+        shell: bash
+        run: |
+          RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 "$API_URL?action=health")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | jq -e '.ok == true and .data.status == "ok"' >/dev/null
+
+      - name: Bootstrap check
+        shell: bash
+        run: |
+          RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 "$API_URL?action=bootstrap")
+          echo "$RESPONSE" | jq -e '.ok == true and (.data.products | length) >= 1 and (.data.delivery | length) >= 1 and (.data.categories | length) >= 1' >/dev/null
+          echo "Catálogo, categorías y delivery disponibles."
+
+      - name: POST parser check without creating a reservation
+        shell: bash
+        run: |
+          RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 -X POST \
+            -H 'Content-Type: text/plain;charset=utf-8' \
+            --data '{"action":"reserve","payload":{}}' \
+            "$API_URL")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | jq -e '.ok == false and (.error | contains("Falta el nombre"))' >/dev/null
