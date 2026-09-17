@@ -76,7 +76,14 @@
   }
 
   function table(headers,rows){
-    return `<table class="admin-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')||`<tr><td colspan="${headers.length}">Sin registros.</td></tr>`}</tbody></table>`;
+    const labelRows=rows.map(row=>{
+      let i=0;
+      return row.replace(/<td(\s[^>]*)?>/g,(m,attrs='')=>{
+        const label=headers[i++]||'';
+        return `<td${attrs||''} data-label="${esc(label)}">`;
+      });
+    });
+    return `<table class="admin-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${labelRows.join('')||`<tr><td colspan="${headers.length}">Sin registros.</td></tr>`}</tbody></table>`;
   }
 
   function statusClass(s){
@@ -161,13 +168,18 @@
       if(v==='')return toast('Ingresa el costo de delivery.');
       act(()=>post('adminSetReservationDelivery',{reserva_id:id,delivery:Number(v)}),'Delivery guardado');
     });
-    $$('[data-confirm-res]').forEach(b=>b.onclick=()=>{
+    $('[data-confirm-res]').forEach(b=>b.onclick=()=>{
       const id=b.dataset.confirmRes,v=reservationDeliveryValue(id);
+      if(!window.confirm(`¿Confirmar la reserva ${id}? Esto descontará el stock físico y creará el pedido.`))return;
       const payload={reserva_id:id};
       if(v!=='')payload.delivery=Number(v);
       act(()=>post('adminConfirmReservation',payload),'Pedido confirmado');
     });
-    $$('[data-cancel-res]').forEach(b=>b.onclick=()=>act(()=>post('adminCancelReservation',{reserva_id:b.dataset.cancelRes}),'Reserva cancelada'));
+    $('[data-cancel-res]').forEach(b=>b.onclick=()=>{
+      const id=b.dataset.cancelRes;
+      if(!window.confirm(`¿Cancelar la reserva ${id}? El stock reservado volverá a estar disponible.`))return;
+      act(()=>post('adminCancelReservation',{reserva_id:id}),'Reserva cancelada');
+    });
   }
 
   function renderOrders(){
@@ -182,9 +194,11 @@
       <td><div class="admin-actions"><button data-save-order="${esc(o.pedido_id)}">Guardar estado</button><button data-detail-order="${esc(o.pedido_id)}">Detalle</button></div></td>
     </tr>`);
     $('#ordersTable').innerHTML=table(['Pedido','Cliente','Entrega','Delivery','Total','Estado','Acciones'],rows);
-    $$('[data-save-order]').forEach(b=>b.onclick=()=>{
-      const sel=$(`[data-order-status="${CSS.escape(b.dataset.saveOrder)}"]`);
-      act(()=>post('adminUpdateOrder',{pedido_id:b.dataset.saveOrder,estado:sel.value}),'Estado actualizado');
+    $('[data-save-order]').forEach(b=>b.onclick=()=>{
+      const id=b.dataset.saveOrder;
+      const sel=$(`[data-order-status="${CSS.escape(id)}"]`);
+      if(sel.value==='CANCELADO'&&!window.confirm(`¿Marcar el pedido ${id} como CANCELADO?`))return;
+      act(()=>post('adminUpdateOrder',{pedido_id:id,estado:sel.value}),'Estado actualizado');
     });
     $$('[data-detail-order]').forEach(b=>b.onclick=()=>openOrderDetail(b.dataset.detailOrder));
   }
