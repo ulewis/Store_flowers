@@ -36,8 +36,25 @@ jobs:
         shell: bash
         run: |
           RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 "$API_URL?action=bootstrap")
-          echo "$RESPONSE" | jq -e '.ok == true and (.data.products | length) >= 1 and (.data.delivery | length) >= 1 and (.data.categories | length) >= 1' >/dev/null
-          echo "Catálogo, categorías y delivery disponibles."
+          echo "$RESPONSE" | jq -e '
+            .ok == true
+            and (.data.version == "2026-09-17.3")
+            and (.data.products | length) >= 4
+            and (.data.products | all(
+              (.id | length) > 0
+              and (.nombre | length) > 0
+              and ((.precio | tonumber) >= 0)
+              and ((.stock_fisico | tonumber) >= 0)
+              and ((.stock_reservado | tonumber) >= 0)
+              and ((.available_stock | tonumber) >= 0)
+              and (.imagen_principal | startswith("https://ulewis.github.io/Store_flowers/assets/products/"))
+            ))
+            and (.data.delivery | length) >= 5
+            and (.data.categories | length) >= 6
+            and (.data.config.WHATSAPP_NUMBER == "51956892798")
+            and (.data.config.STORE_STATUS == "open")
+          ' >/dev/null
+          echo "Catálogo, imágenes, stock, categorías, delivery y WhatsApp correctos."
 
       - name: POST parser check without creating a reservation
         shell: bash
