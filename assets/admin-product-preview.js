@@ -41,8 +41,10 @@
 
   async function loadSource(file){
     if('createImageBitmap' in window){
-      const bmp=await createImageBitmap(file);
-      return {source:bmp,width:bmp.width,height:bmp.height,close:()=>bmp.close?.()};
+      try{
+        const bmp=await createImageBitmap(file);
+        return {source:bmp,width:bmp.width,height:bmp.height,close:()=>bmp.close?.()};
+      }catch(e){}
     }
     const url=URL.createObjectURL(file);
     try{
@@ -135,8 +137,11 @@
         const index=Number(b.dataset.removeImage);
         const current=urls();
         const removed=current[index];
-        if(index===0)main.value='';
-        else{
+        if(index===0){
+          const rest=String(extra.value||'').split(/[|,\n]/).map(x=>x.trim()).filter(Boolean);
+          main.value=rest.shift()||'';
+          extra.value=rest.join('|');
+        }else{
           const rest=String(extra.value||'').split(/[|,\n]/).map(x=>x.trim()).filter(Boolean).filter(x=>x!==removed);
           extra.value=rest.join('|');
         }
