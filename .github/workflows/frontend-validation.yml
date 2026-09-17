@@ -21,6 +21,13 @@ jobs:
             echo "Checking $f"
             node --check "$f"
           done
+      - name: Check Apps Script source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp apps-script/Code.gs /tmp/store-backend.js
+          node --check /tmp/store-backend.js
+
       - name: Check required storefront files
         shell: bash
         run: |
