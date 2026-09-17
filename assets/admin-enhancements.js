@@ -7,7 +7,7 @@
     const style = document.createElement('style');
     style.textContent = `
       .admin-quick-search{position:relative;min-width:240px;max-width:360px;flex:1}.admin-quick-search input{width:100%;box-sizing:border-box;border:1px solid rgba(33,30,30,.14);border-radius:999px;background:#fff;padding:11px 38px 11px 15px;font:500 14px/1.2 'DM Sans',sans-serif;outline:none}.admin-quick-search input:focus{border-color:rgba(33,30,30,.4);box-shadow:0 0 0 3px rgba(33,30,30,.06)}.admin-quick-search button{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:50%;background:#f2eeeb;cursor:pointer}.admin-filter-empty{padding:18px;color:#7d7470;text-align:center}
-      .system-health{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.system-health-item{border:1px solid rgba(33,30,30,.1);border-radius:14px;padding:12px;background:#fbf9f7}.system-health-item span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#7d7470}.system-health-item strong{display:block;margin-top:5px;font-size:13px;overflow-wrap:anywhere}.system-health-item.ok strong{color:#3e6d4c}.system-health-item.warn strong{color:#9a6724}@media(max-width:900px){.system-health{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.admin-topbar{flex-wrap:wrap}.admin-quick-search{order:3;min-width:100%;max-width:none}.admin-quick-search input{font-size:16px}.system-health{grid-template-columns:1fr 1fr}}
+      .system-health{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}.system-health-item{border:1px solid rgba(33,30,30,.1);border-radius:14px;padding:12px;background:#fbf9f7}.system-health-item span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#7d7470}.system-health-item strong{display:block;margin-top:5px;font-size:13px;overflow-wrap:anywhere}.system-health-item.ok strong{color:#3e6d4c}.system-health-item.warn strong{color:#9a6724}@media(max-width:900px){.system-health{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.admin-topbar{flex-wrap:wrap}.admin-quick-search{order:3;min-width:100%;max-width:none}.admin-quick-search input{font-size:16px}.system-health{grid-template-columns:1fr 1fr}}
     `;
     document.head.appendChild(style);
 
@@ -37,19 +37,29 @@
       if(!token){target.innerHTML='<div class="system-health-item warn"><span>Panel</span><strong>Inicia sesión para diagnosticar</strong></div>';return;}
       try{
         const cfg=window.STORE_CONFIG||{};
-        const u=new URL(cfg.API_URL);u.searchParams.set('action','adminSnapshot');u.searchParams.set('token',token);
-        const r=await fetch(u,{redirect:'follow'});const j=await r.json();if(j.ok===false)throw new Error(j.error||'Sin conexión');
-        const d=j.data||j;
+        let d=null;
+        try{
+          const rp=await fetch(cfg.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'adminSnapshot',payload:{token}}),redirect:'follow'});
+          const jp=await rp.json();
+          if(jp.ok!==false)d=jp.data||jp;
+        }catch(e){}
+        if(!d){
+          const u=new URL(cfg.API_URL);u.searchParams.set('action','adminSnapshot');u.searchParams.set('token',token);
+          const rg=await fetch(u,{redirect:'follow'});const jg=await rg.json();if(jg.ok===false)throw new Error(jg.error||'Sin conexión');
+          d=jg.data||jg;
+        }
         const emails=String(d.config?.ADMIN_EMAIL||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean);
         const wa=String(d.config?.WHATSAPP_NUMBER||'').replace(/\D/g,'');
         const products=(d.products||[]).filter(p=>p.activo===true||String(p.activo).toLowerCase()==='true').length;
         const zones=(d.delivery||[]).filter(z=>z.activo===true||String(z.activo).toLowerCase()==='true').length;
+        const github=!!d.integrations?.githubUpload;
         target.innerHTML=
           '<div class="system-health-item ok"><span>Backend</span><strong>'+String(d.version||'activo')+'</strong></div>'+
           '<div class="system-health-item '+(products?'ok':'warn')+'"><span>Productos activos</span><strong>'+products+'</strong></div>'+
           '<div class="system-health-item '+(zones?'ok':'warn')+'"><span>Zonas delivery</span><strong>'+zones+'</strong></div>'+
           '<div class="system-health-item '+(wa?'ok':'warn')+'"><span>WhatsApp</span><strong>'+(wa?'Configurado':'Falta configurar')+'</strong></div>'+
-          '<div class="system-health-item '+(emails.length?'ok':'warn')+'"><span>Correos de aviso</span><strong>'+emails.length+' configurado'+(emails.length===1?'':'s')+'</strong></div>';
+          '<div class="system-health-item '+(emails.length?'ok':'warn')+'"><span>Correos de aviso</span><strong>'+emails.length+' configurado'+(emails.length===1?'':'s')+'</strong></div>'+
+          '<div class="system-health-item '+(github?'ok':'warn')+'"><span>Imágenes GitHub</span><strong>'+(github?'Conectado':'Sin conectar')+'</strong></div>';
       }catch(err){
         target.innerHTML='<div class="system-health-item warn"><span>Backend</span><strong>'+String(err.message||'No disponible')+'</strong></div>';
       }
