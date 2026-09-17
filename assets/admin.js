@@ -29,7 +29,7 @@
         if(j.ok!==false)return j.data||j;
         if(!String(j.error||'').includes('Acción no válida'))throw new Error(j.error||'Acceso denegado');
       }catch(e){
-        if(!String(e.message||'').includes('Acción no válida')){/* continúa con compatibilidad GET */}
+        if(!String(e.message||'').includes('Acción no válida'))throw e;
       }
     }
     const u=new URL(cfg.API_URL);
