@@ -1,0 +1,11 @@
+window.STORE_CONFIG = {
+  STORE_NAME: 'Store Flowers',
+  API_URL: '',
+  PUBLIC_WHATSAPP: '',
+  RESERVATION_MINUTES: 30,
+  DEFAULT_CITY: 'Piura',
+  DEFAULT_REGION: 'Piura',
+  COUNTRY: 'Perú',
+  CURRENCY: 'PEN',
+  CURRENCY_SYMBOL: 'S/'
+};
