@@ -12,8 +12,13 @@ window.STORE_CONFIG = {
 
 (() => {
   const isAdmin = /(?:^|\/)admin\.html(?:$|[?#])/.test(location.pathname + location.search + location.hash);
-  const script = document.createElement('script');
-  script.src = isAdmin ? 'assets/admin-enhancements.js' : 'assets/reservation-status.js';
-  script.defer = true;
-  document.head.appendChild(script);
+  const scripts = isAdmin
+    ? ['assets/admin-enhancements.js','assets/admin-catalog-manager.js']
+    : ['assets/reservation-status.js'];
+  scripts.forEach(src => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.defer = true;
+    document.head.appendChild(script);
+  });
 })();
