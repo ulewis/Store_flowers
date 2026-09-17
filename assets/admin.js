@@ -108,7 +108,7 @@
 
   function renderProducts(){
     const cats=data.categories||[];
-    $('#adminCategorySelect').innerHTML=cats.filter(c=>bool(c.activo)).map(c=>`<option value="${esc(c.categoria_id)}">${esc(c.nombre)}</option>`).join('');
+    $('#adminCategorySelect').innerHTML=cats.map(c=>`<option value="${esc(c.categoria_id)}">${esc(c.nombre)}${bool(c.activo)?'':' (oculta)'}</option>`).join('');
     const rows=(data.products||[]).map(p=>{
       const avail=Math.max(0,Number(p.stock_fisico||0)-Number(p.stock_reservado||0));
       return `<tr><td>${esc(p.id)}</td><td>${esc(p.nombre)}</td><td>${money(p.precio)}</td><td>${p.stock_fisico}</td><td>${p.stock_reservado}</td><td>${avail}</td><td>${bool(p.activo)?'Sí':'No'}</td><td><div class="admin-actions"><button data-edit-product="${esc(p.id)}">Editar</button><button data-toggle-product="${esc(p.id)}">${bool(p.activo)?'Ocultar':'Activar'}</button></div></td></tr>`;
@@ -124,7 +124,7 @@
   function fillProduct(id){
     const p=data.products.find(x=>x.id===id);if(!p)return;
     const f=$('#productForm');
-    ['id','nombre','categoria_id','precio','stock_fisico','etiqueta_stock','imagen_principal','imagenes','orden','descripcion'].forEach(k=>{if(f.elements[k])f.elements[k].value=p[k]??'';});
+    ['id','nombre','categoria_id','precio','stock_fisico','etiqueta_stock','imagen_principal','imagenes','orden','fecha_inicio','fecha_fin','descripcion'].forEach(k=>{if(f.elements[k])f.elements[k].value=p[k]??'';});
     ['activo','destacado','personalizable'].forEach(k=>f.elements[k].checked=bool(p[k]));
     window.scrollTo({top:0,behavior:'smooth'});
   }
@@ -132,7 +132,7 @@
   function productPayload(f){
     const o=Object.fromEntries(new FormData(f));
     return {
-      id:o.id||'',nombre:o.nombre,categoria_id:o.categoria_id,precio:Number(o.precio||0),stock_fisico:Number(o.stock_fisico||0),etiqueta_stock:o.etiqueta_stock||'',imagen_principal:o.imagen_principal||'',imagenes:o.imagenes||'',orden:Number(o.orden||99),descripcion:o.descripcion||'',activo:f.elements.activo.checked,destacado:f.elements.destacado.checked,personalizable:f.elements.personalizable.checked
+      id:o.id||'',nombre:o.nombre,categoria_id:o.categoria_id,precio:Number(o.precio||0),stock_fisico:Number(o.stock_fisico||0),etiqueta_stock:o.etiqueta_stock||'',imagen_principal:o.imagen_principal||'',imagenes:o.imagenes||'',orden:Number(o.orden||99),fecha_inicio:o.fecha_inicio||'',fecha_fin:o.fecha_fin||'',descripcion:o.descripcion||'',activo:f.elements.activo.checked,destacado:f.elements.destacado.checked,personalizable:f.elements.personalizable.checked
     };
   }
 
