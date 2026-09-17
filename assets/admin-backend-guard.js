@@ -1,6 +1,6 @@
 (() => {
   const cfg = window.STORE_CONFIG || {};
-  const REQUIRED = '2026-09-17.3';
+  const REQUIRED = '2026-09-17.5';
 
   function compare(a,b){
     const pa=String(a||'').split(/[-.]/).map(x=>Number(x)||0),pb=String(b||'').split(/[-.]/).map(x=>Number(x)||0);
@@ -9,13 +9,14 @@
   }
 
   function lock(message){
-    ['categoryManagerForm','newDeliveryForm'].forEach(id=>{
+    ['categoryManagerForm','newDeliveryForm','productImageManager'].forEach(id=>{
       const form=document.getElementById(id);if(!form)return;
       form.querySelectorAll('input,textarea,select,button').forEach(el=>el.disabled=true);
-      if(!form.previousElementSibling?.classList?.contains('backend-upgrade-note')){
+      form.querySelectorAll('label').forEach(el=>{if(el.htmlFor||el.querySelector('input[type=file]'))el.style.pointerEvents='none';});
+      if(!form.previousElementSibling?.classList?.contains('backend-upgrade-note')&&!form.querySelector('.backend-upgrade-note')){
         const note=document.createElement('div');note.className='backend-upgrade-note';note.textContent=message;
         note.style.cssText='margin:0 0 14px;padding:11px 13px;border-radius:12px;background:#fff3df;color:#6d4b16;font:600 13px/1.4 DM Sans,sans-serif';
-        form.parentNode.insertBefore(note,form);
+        if(id==='productImageManager')form.insertBefore(note,form.firstChild);else form.parentNode.insertBefore(note,form);
       }
     });
   }
