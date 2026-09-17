@@ -1,6 +1,6 @@
 const STORE_DB_ID = '1CU1g1v_xLceeDfGVwQw70W5xtxLiSEFa9u-WuGUlc1k';
 const SHEETS = { PRODUCTS:'Productos', RESERVATIONS:'Reservas', ORDERS:'Pedidos', DELIVERY:'Delivery', CATEGORIES:'Categorias', CONFIG:'Configuracion', AUDIT:'Auditoria' };
-const API_VERSION = '2026-09-17.3';
+const API_VERSION = '2026-09-17.4';
 
 function doGet(e) {
   try {
@@ -102,6 +102,13 @@ function reserve_(p) {
     releaseExpiredReservationsNoLock_();
     const cfg = configMap_();
     if (String(cfg.STORE_STATUS || 'open').toLowerCase() !== 'open') throw new Error('La tienda no está recibiendo reservas en este momento.');
+
+    const phoneDigits = String(p.phone || '').replace(/\D/g,'');
+    const pendingForPhone = rows_(SHEETS.RESERVATIONS).filter(r =>
+      String(r.estado || '').toUpperCase() === 'PENDIENTE' &&
+      String(r.cliente_whatsapp || '').replace(/\D/g,'') === phoneDigits
+    );
+    if (pendingForPhone.length >= 3) throw new Error('Ya existen varias reservas pendientes con este WhatsApp. Confirma o espera que venza una antes de crear otra.');
 
     const products = rows_(SHEETS.PRODUCTS);
     const byId = {};
@@ -460,8 +467,8 @@ function releaseStockForReservation_(r) {
 
 function sendReservationEmail_(id,p,items,zone,subtotal,delivery,total,expires) {
   const cfg = configMap_();
-  const email = String(cfg.ADMIN_EMAIL || '').trim();
-  if (!email) return;
+  const recipients = String(cfg.ADMIN_EMAIL || '').split(/[;,]/).map(x => x.trim()).filter(Boolean);
+  if (!recipients.length) return;
 
   const itemText = items.map(i => `• ${i.name} x${i.qty} — S/ ${(i.unitPrice*i.qty).toFixed(2)}${i.personalization ? ' | '+i.personalization : ''}`).join('\n');
   const body = [
@@ -511,7 +518,7 @@ function sendReservationEmail_(id,p,items,zone,subtotal,delivery,total,expires) 
     </div>`;
 
   MailApp.sendEmail({
-    to:email,
+    to:recipients.join(','),
     subject:`Nueva reserva ${id} — ${p.name}`,
     body,
     htmlBody,
@@ -522,7 +529,17 @@ function sendReservationEmail_(id,p,items,zone,subtotal,delivery,total,expires) 
 function validateReservation_(p) {
   if (!String(p.name || '').trim()) throw new Error('Falta el nombre del cliente.');
   if (String(p.phone || '').replace(/\D/g,'').length < 7) throw new Error('Ingresa un WhatsApp válido.');
-  if (!String(p.deliveryDate || '').trim()) throw new Error('Falta la fecha de entrega.');
+
+  const deliveryDate = String(p.deliveryDate || '').trim();
+  if (!deliveryDate) throw new Error('Falta la fecha de entrega.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) throw new Error('La fecha de entrega no es válida.');
+  const cfg = configMap_();
+  const minHours = Math.max(0, num_(cfg.MIN_NOTICE_HOURS || 0));
+  const minDate = Utilities.formatDate(new Date(Date.now() + minHours * 60 * 60 * 1000), 'America/Lima', 'yyyy-MM-dd');
+  if (deliveryDate < minDate) throw new Error('La fecha de entrega no cumple con la anticipación mínima de la tienda.');
+
+  const email = String(p.email || '').trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('El correo ingresado no es válido.');
   if (!String(p.deliveryWindow || '').trim()) throw new Error('Falta el horario de entrega.');
   if (!String(p.zoneId || '').trim()) throw new Error('Falta la zona de entrega.');
   if (!String(p.address || '').trim()) throw new Error('Falta la dirección.');
