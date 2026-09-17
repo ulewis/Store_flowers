@@ -1,6 +1,6 @@
 const STORE_DB_ID = '1CU1g1v_xLceeDfGVwQw70W5xtxLiSEFa9u-WuGUlc1k';
 const SHEETS = { PRODUCTS:'Productos', RESERVATIONS:'Reservas', ORDERS:'Pedidos', DELIVERY:'Delivery', CATEGORIES:'Categorias', CONFIG:'Configuracion', AUDIT:'Auditoria' };
-const API_VERSION = '2026-09-17.2';
+const API_VERSION = '2026-09-17.3';
 
 function doGet(e) {
   try {
@@ -31,6 +31,7 @@ function doPost(e) {
     if (action === 'adminUpdateOrder') return json_({ok:true, data:updateOrder_(payload)});
     if (action === 'adminSaveProduct') return json_({ok:true, data:saveProduct_(payload)});
     if (action === 'adminSaveDelivery') return json_({ok:true, data:saveDelivery_(payload)});
+    if (action === 'adminSaveCategory') return json_({ok:true, data:saveCategory_(payload)});
     if (action === 'adminSaveConfig') return json_({ok:true, data:saveConfig_(payload)});
     return json_({ok:false, error:'Acción no válida.'});
   } catch (err) {
@@ -360,16 +361,66 @@ function saveProduct_(p) {
 }
 
 function saveDelivery_(p) {
-  const row = findBy_(SHEETS.DELIVERY,'zona_id',p.zona_id);
-  if (!row) throw new Error('Zona no encontrada.');
+  const zones = rows_(SHEETS.DELIVERY);
+  let row = p.zona_id ? zones.find(x => String(x.zona_id) === String(p.zona_id)) : null;
+
+  if (!row && !String(p.nombre || '').trim()) throw new Error('La zona necesita nombre.');
+
+  if (!row) {
+    let id = 'DEL-' + slug_(p.nombre).toUpperCase().replace(/-/g,'_');
+    if (!id || id === 'DEL-') id = 'DEL-' + Utilities.getUuid().slice(0,6).toUpperCase();
+    if (zones.some(x => String(x.zona_id) === id)) id += '-' + Utilities.getUuid().slice(0,4).toUpperCase();
+    const record = {
+      zona_id:id,
+      nombre:String(p.nombre || '').trim().slice(0,100),
+      distrito:String(p.distrito || p.nombre || '').trim().slice(0,100),
+      costo:Math.max(0,num_(p.costo)),
+      requiere_cotizacion:bool_(p.requiere_cotizacion),
+      activo:bool_(p.activo),
+      orden:num_(p.orden || 99),
+      nota:String(p.nota || '').trim().slice(0,250)
+    };
+    appendByHeaders_(SHEETS.DELIVERY,record);
+    audit_('admin','CREAR','delivery',id,record);
+    return {zona_id:id,created:true};
+  }
+
   const changes = {
+    nombre:p.nombre !== undefined ? String(p.nombre || '').trim().slice(0,100) : row.nombre,
+    distrito:p.distrito !== undefined ? String(p.distrito || '').trim().slice(0,100) : row.distrito,
     costo:Math.max(0,num_(p.costo)),
     requiere_cotizacion:bool_(p.requiere_cotizacion),
-    activo:bool_(p.activo)
+    activo:bool_(p.activo),
+    orden:p.orden !== undefined ? num_(p.orden || 99) : row.orden,
+    nota:p.nota !== undefined ? String(p.nota || '').trim().slice(0,250) : row.nota
   };
   updateRowByHeaders_(SHEETS.DELIVERY,row._row,changes);
   audit_('admin','GUARDAR','delivery',row.zona_id,changes);
-  return {zona_id:row.zona_id};
+  return {zona_id:row.zona_id,created:false};
+}
+
+function saveCategory_(p) {
+  if (!String(p.nombre || '').trim()) throw new Error('La categoría necesita nombre.');
+  const categories = rows_(SHEETS.CATEGORIES);
+  let row = p.categoria_id ? categories.find(x => String(x.categoria_id) === String(p.categoria_id)) : null;
+  let id = row ? String(row.categoria_id) : slug_(p.nombre);
+  if (!id) id = 'categoria-' + Utilities.getUuid().slice(0,6).toLowerCase();
+  if (!row && categories.some(x => String(x.categoria_id) === id)) id += '-' + Utilities.getUuid().slice(0,4).toLowerCase();
+
+  const record = {
+    categoria_id:id,
+    nombre:String(p.nombre || '').trim().slice(0,100),
+    emoji:String(p.emoji || '🎁').trim().slice(0,8),
+    descripcion:String(p.descripcion || '').trim().slice(0,220),
+    activo:bool_(p.activo),
+    orden:num_(p.orden || 99),
+    fecha_inicio:String(p.fecha_inicio || '').slice(0,20),
+    fecha_fin:String(p.fecha_fin || '').slice(0,20)
+  };
+  if (row) updateRowByHeaders_(SHEETS.CATEGORIES,row._row,record);
+  else appendByHeaders_(SHEETS.CATEGORIES,record);
+  audit_('admin',row ? 'GUARDAR' : 'CREAR','categoria',id,record);
+  return {categoria_id:id,created:!row};
 }
 
 function saveConfig_(p) {
