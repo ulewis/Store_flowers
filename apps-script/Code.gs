@@ -272,9 +272,9 @@ function confirmReservation_(p) {
       Object.keys(qtyById).forEach(id => {
         const pr = byId[id];
         const qty = qtyById[id];
+        changedIds.push(id);
         setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico)-qty);
         setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',num_(pr.stock_reservado)-qty);
-        changedIds.push(id);
       });
 
       setCellByHeader_(SHEETS.RESERVATIONS,r._row,'delivery',delivery);
@@ -578,7 +578,8 @@ function releaseReservationStockAndSetStatus_(r,newStatus) {
       const pr = byId[id];
       if (!pr) return;
       const oldReserved = num_(pr.stock_reservado);
-      const nextReserved = Math.max(0,oldReserved-qtyById[id]);
+      if (oldReserved < qtyById[id]) throw new Error(pr.nombre+': el stock reservado es inconsistente y no se modificó.');
+      const nextReserved = oldReserved-qtyById[id];
       setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',nextReserved);
       changed.push({row:pr._row,oldReserved});
     });
@@ -793,7 +794,7 @@ function db_(){ return SpreadsheetApp.openById(STORE_DB_ID); }
 function sheet_(name){ const sh=db_().getSheetByName(name); if(!sh)throw new Error(`Falta la pestaña ${name}.`); return sh; }
 function headers_(name){ const sh=sheet_(name); const last=Math.max(1,sh.getLastColumn()); return sh.getRange(1,1,1,last).getValues()[0].map(String); }
 function rows_(name){ const sh=sheet_(name); const h=headers_(name); const lr=sh.getLastRow(); if(lr<2)return[]; return sh.getRange(2,1,lr-1,h.length).getValues().map((vals,i)=>{const o={_row:i+2};h.forEach((k,j)=>o[k]=vals[j]);return o;}); }
-function appendByHeaders_(name,obj){ const sh=sheet_(name),h=headers_(name); sh.appendRow(h.map(k=>obj[k]===undefined?'':obj[k])); return sh.getLastRow(); }
+function appendByHeaders_(name,obj){ const sh=sheet_(name),h=headers_(name); sh.appendRow(h.map(k=>obj[k]===undefined?'':obj[k])); }
 function updateRowByHeaders_(name,row,obj){ const sh=sheet_(name),h=headers_(name),current=sh.getRange(row,1,1,h.length).getValues()[0]; h.forEach((k,i)=>{if(obj[k]!==undefined)current[i]=obj[k]}); sh.getRange(row,1,1,h.length).setValues([current]); }
 function setCellByHeader_(name,row,header,value){ const sh=sheet_(name),h=headers_(name),idx=h.indexOf(header); if(idx<0)throw new Error(`Falta columna ${header}.`); sh.getRange(row,idx+1).setValue(value); }
 function findBy_(name,header,value){ return rows_(name).find(r=>String(r[header])===String(value)); }
