@@ -357,9 +357,10 @@ function saveProduct_(p) {
     etiqueta_stock:String(p.etiqueta_stock || ''),
     personalizable:bool_(p.personalizable),
     orden:num_(p.orden || 99),
-    fecha_inicio:row ? row.fecha_inicio || '' : '',
-    fecha_fin:row ? row.fecha_fin || '' : ''
+    fecha_inicio:p.fecha_inicio !== undefined ? String(p.fecha_inicio || '').slice(0,20) : (row ? row.fecha_inicio || '' : ''),
+    fecha_fin:p.fecha_fin !== undefined ? String(p.fecha_fin || '').slice(0,20) : (row ? row.fecha_fin || '' : '')
   };
+  if (record.fecha_inicio && record.fecha_fin && String(record.fecha_fin) < String(record.fecha_inicio)) throw new Error('La fecha final del producto no puede ser anterior a la fecha inicial.');
 
   if (row) updateRowByHeaders_(SHEETS.PRODUCTS,row._row,record);
   else appendByHeaders_(SHEETS.PRODUCTS,record);
