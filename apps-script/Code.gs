@@ -12,10 +12,6 @@ function doGet(e) {
     const action = String((e && e.parameter && e.parameter.action) || 'bootstrap');
     if (action === 'health') return json_({ok:true, data:{status:'ok', version:API_VERSION, time:new Date().toISOString()}});
     if (action === 'bootstrap') return json_({ok:true, data:bootstrap_()});
-    if (action === 'adminSnapshot') {
-      requireAdmin_(e.parameter.token);
-      return json_({ok:true, data:adminSnapshot_()});
-    }
     return json_({ok:false, error:'Acción no válida.'});
   } catch (err) {
     return json_({ok:false, error:safeError_(err)});
@@ -67,7 +63,6 @@ function setup() {
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('releaseExpiredReservations').timeBased().everyMinutes(5).create();
 
-  Logger.log('ADMIN_TOKEN: ' + token);
   Logger.log('Base conectada: ' + STORE_DB_ID);
   return {adminToken:token, spreadsheetId:STORE_DB_ID, version:API_VERSION};
 }
@@ -131,7 +126,8 @@ function reserve_(p) {
     (p.items || []).forEach(item => {
       const pr = byId[String(item.id)];
       if (!pr || !bool_(pr.activo) || !inDateWindow_(pr, now)) throw new Error('Uno de los productos ya no está disponible. Actualiza el catálogo.');
-      const qty = Math.max(1, Math.floor(num_(item.qty)));
+      const qty = Math.floor(num_(item.qty));
+      if (qty < 1) throw new Error('La cantidad de un producto no es válida.');
       totalQty += qty;
       if (totalQty > 50) throw new Error('La reserva supera la cantidad máxima permitida.');
       const available = Math.max(0, num_(pr.stock_fisico) - num_(pr.stock_reservado));
@@ -148,6 +144,7 @@ function reserve_(p) {
       });
     });
 
+    const mapsUrl = safeOptionalHttpsUrl_(p.mapsUrl);
     const zone = rows_(SHEETS.DELIVERY).find(d => String(d.zona_id) === String(p.zoneId) && bool_(d.activo));
     if (!zone) throw new Error('La zona de entrega ya no está disponible.');
     const quoteDelivery = bool_(zone.requiere_cotizacion);
@@ -158,37 +155,49 @@ function reserve_(p) {
     const expires = new Date(created.getTime() + minutes * 60000);
     const reservationId = makeId_('RSV');
 
-    Object.keys(requestedById).forEach(id => {
-      const pr = byId[id];
-      setCellByHeader_(SHEETS.PRODUCTS, pr._row, 'stock_reservado', num_(pr.stock_reservado) + requestedById[id]);
-    });
+    const appliedIds = [];
+    try {
+      Object.keys(requestedById).forEach(id => {
+        const pr = byId[id];
+        setCellByHeader_(SHEETS.PRODUCTS, pr._row, 'stock_reservado', num_(pr.stock_reservado) + requestedById[id]);
+        appliedIds.push(id);
+      });
 
-    appendByHeaders_(SHEETS.RESERVATIONS, {
-      reserva_id:reservationId,
-      fecha_creacion:created,
-      fecha_expiracion:expires,
-      estado:'PENDIENTE',
-      cliente_nombre:String(p.name || '').trim().slice(0,120),
-      cliente_whatsapp:String(p.phone || '').trim().slice(0,40),
-      cliente_email:String(p.email || '').trim().slice(0,160),
-      fecha_entrega:String(p.deliveryDate || '').slice(0,30),
-      franja_entrega:String(p.deliveryWindow || '').slice(0,80),
-      direccion:String(p.address || '').trim().slice(0,300),
-      distrito:String(zone.distrito || zone.nombre || '').slice(0,100),
-      referencia:String(p.reference || '').trim().slice(0,250),
-      maps_url:String(p.mapsUrl || '').trim().slice(0,1000),
-      dedicatoria:String(p.dedication || '').trim().slice(0,500),
-      observaciones:String(p.notes || '').trim().slice(0,500),
-      items_json:JSON.stringify(normalizedItems),
-      subtotal:subtotal,
-      delivery:delivery === null ? '' : delivery,
-      total:total === null ? '' : total,
-      origen:String(p.origin || '').slice(0,1000),
-      ip_hash:''
-    });
+      appendByHeaders_(SHEETS.RESERVATIONS, {
+        reserva_id:reservationId,
+        fecha_creacion:created,
+        fecha_expiracion:expires,
+        estado:'PENDIENTE',
+        cliente_nombre:String(p.name || '').trim().slice(0,120),
+        cliente_whatsapp:String(p.phone || '').trim().slice(0,40),
+        cliente_email:String(p.email || '').trim().slice(0,160),
+        fecha_entrega:String(p.deliveryDate || '').slice(0,30),
+        franja_entrega:String(p.deliveryWindow || '').slice(0,80),
+        direccion:String(p.address || '').trim().slice(0,300),
+        distrito:String(zone.distrito || zone.nombre || '').slice(0,100),
+        referencia:String(p.reference || '').trim().slice(0,250),
+        maps_url:mapsUrl,
+        dedicatoria:String(p.dedication || '').trim().slice(0,500),
+        observaciones:String(p.notes || '').trim().slice(0,500),
+        items_json:JSON.stringify(normalizedItems),
+        subtotal:subtotal,
+        delivery:delivery === null ? '' : delivery,
+        total:total === null ? '' : total,
+        origen:String(p.origin || '').slice(0,1000),
+        ip_hash:''
+      });
+    } catch (err) {
+      appliedIds.forEach(id => {
+        try {
+          const pr = byId[id];
+          setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',num_(pr.stock_reservado));
+        } catch (rollbackErr) {}
+      });
+      throw err;
+    }
 
     audit_('cliente','RESERVAR','reserva',reservationId,{items:normalizedItems, subtotal, delivery, total});
-    try { sendReservationEmail_(reservationId, p, normalizedItems, zone, subtotal, delivery, total, expires); }
+    try { sendReservationEmail_(reservationId, {...p,mapsUrl}, normalizedItems, zone, subtotal, delivery, total, expires); }
     catch (mailErr) { audit_('sistema','ERROR_CORREO','reserva',reservationId,{error:String(mailErr)}); }
 
     return {
@@ -240,14 +249,7 @@ function confirmReservation_(p) {
     if (String(r.estado).toUpperCase() !== 'PENDIENTE') throw new Error('La reserva ya no está pendiente.');
 
     let delivery = hasValue_(r.delivery) ? Math.max(0, num_(r.delivery)) : null;
-    if (p && hasValue_(p.delivery)) {
-      delivery = Math.max(0, num_(p.delivery));
-      const updatedTotal = num_(r.subtotal) + delivery;
-      setCellByHeader_(SHEETS.RESERVATIONS,r._row,'delivery',delivery);
-      setCellByHeader_(SHEETS.RESERVATIONS,r._row,'total',updatedTotal);
-      r.delivery = delivery;
-      r.total = updatedTotal;
-    }
+    if (p && hasValue_(p.delivery)) delivery = Math.max(0, num_(p.delivery));
     if (delivery === null) throw new Error('Define el costo de delivery antes de confirmar el pedido.');
 
     const items = parseItems_(r.items_json);
@@ -264,47 +266,66 @@ function confirmReservation_(p) {
       if (num_(pr.stock_reservado) < qty) throw new Error(`${pr.nombre}: el stock reservado ya no coincide. Revisa la reserva.`);
       if (num_(pr.stock_fisico) < qty) throw new Error(`${pr.nombre}: el stock físico ya no es suficiente. Revisa el inventario.`);
     });
-    Object.keys(qtyById).forEach(id => {
-      const pr = byId[id];
-      const qty = qtyById[id];
-      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico)-qty);
-      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',num_(pr.stock_reservado)-qty);
-    });
-
     const total = num_(r.subtotal) + delivery;
-    setCellByHeader_(SHEETS.RESERVATIONS,r._row,'delivery',delivery);
-    setCellByHeader_(SHEETS.RESERVATIONS,r._row,'total',total);
-    setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado','CONFIRMADA');
+    const changedIds = [];
+    try {
+      Object.keys(qtyById).forEach(id => {
+        const pr = byId[id];
+        const qty = qtyById[id];
+        setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico)-qty);
+        setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',num_(pr.stock_reservado)-qty);
+        changedIds.push(id);
+      });
 
-    const orderId = makeId_('PED');
-    appendByHeaders_(SHEETS.ORDERS, {
-      pedido_id:orderId,
-      reserva_id:r.reserva_id,
-      fecha:new Date(),
-      estado:'CONFIRMADO',
-      cliente_nombre:r.cliente_nombre,
-      cliente_whatsapp:r.cliente_whatsapp,
-      fecha_entrega:r.fecha_entrega,
-      direccion:r.direccion,
-      distrito:r.distrito,
-      maps_url:r.maps_url,
-      items_json:r.items_json,
-      subtotal:r.subtotal,
-      delivery:delivery,
-      total:total,
-      metodo_pago:'',
-      notas_admin:'',
-      fecha_confirmacion:new Date(),
-      fecha_entrega_real:'',
-      cliente_email:r.cliente_email,
-      franja_entrega:r.franja_entrega,
-      referencia:r.referencia,
-      dedicatoria:r.dedicatoria,
-      observaciones:r.observaciones
-    });
+      setCellByHeader_(SHEETS.RESERVATIONS,r._row,'delivery',delivery);
+      setCellByHeader_(SHEETS.RESERVATIONS,r._row,'total',total);
+      setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado','CONFIRMADA');
 
-    audit_('admin','CONFIRMAR','reserva',r.reserva_id,{pedido_id:orderId,delivery,total});
-    return {pedido_id:orderId,reserva_id:r.reserva_id,delivery,total};
+      const orderId = makeId_('PED');
+      appendByHeaders_(SHEETS.ORDERS, {
+        pedido_id:orderId,
+        reserva_id:r.reserva_id,
+        fecha:new Date(),
+        estado:'CONFIRMADO',
+        cliente_nombre:r.cliente_nombre,
+        cliente_whatsapp:r.cliente_whatsapp,
+        fecha_entrega:r.fecha_entrega,
+        direccion:r.direccion,
+        distrito:r.distrito,
+        maps_url:r.maps_url,
+        items_json:r.items_json,
+        subtotal:r.subtotal,
+        delivery:delivery,
+        total:total,
+        metodo_pago:'',
+        notas_admin:'',
+        fecha_confirmacion:new Date(),
+        fecha_entrega_real:'',
+        cliente_email:r.cliente_email,
+        franja_entrega:r.franja_entrega,
+        referencia:r.referencia,
+        dedicatoria:r.dedicatoria,
+        observaciones:r.observaciones
+      });
+
+      audit_('admin','CONFIRMAR','reserva',r.reserva_id,{pedido_id:orderId,delivery,total});
+      return {pedido_id:orderId,reserva_id:r.reserva_id,delivery,total};
+    } catch (err) {
+      changedIds.forEach(id => {
+        try {
+          const pr=byId[id];
+          setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico));
+          setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',num_(pr.stock_reservado));
+        } catch (rollbackErr) {}
+      });
+      try {
+        setCellByHeader_(SHEETS.RESERVATIONS,r._row,'delivery',r.delivery);
+        setCellByHeader_(SHEETS.RESERVATIONS,r._row,'total',r.total);
+        setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado',r.estado);
+      } catch (rollbackErr) {}
+      throw err;
+    }
+
   } finally {
     lock.releaseLock();
   }
@@ -412,6 +433,7 @@ function saveDelivery_(p) {
   let row = p.zona_id ? zones.find(x => String(x.zona_id) === String(p.zona_id)) : null;
 
   if (!row && !String(p.nombre || '').trim()) throw new Error('La zona necesita nombre.');
+  if (row && p.nombre !== undefined && !String(p.nombre || '').trim()) throw new Error('La zona necesita nombre.');
 
   if (!row) {
     let id = 'DEL-' + slug_(p.nombre).toUpperCase().replace(/-/g,'_');
@@ -619,7 +641,11 @@ function validateReservation_(p) {
 
   const email = String(p.email || '').trim();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('El correo ingresado no es válido.');
-  if (!String(p.deliveryWindow || '').trim()) throw new Error('Falta el horario de entrega.');
+  const windowValue = String(p.deliveryWindow || '').trim();
+  const allowedWindows = ['Mañana (9:00–12:00)','Tarde (12:00–17:00)','Noche (17:00–21:00)','A coordinar'];
+  if (!windowValue) throw new Error('Falta el horario de entrega.');
+  if (allowedWindows.indexOf(windowValue) < 0) throw new Error('El horario de entrega no es válido.');
+  safeOptionalHttpsUrl_(p.mapsUrl);
   if (!String(p.zoneId || '').trim()) throw new Error('Falta la zona de entrega.');
   if (!String(p.address || '').trim()) throw new Error('Falta la dirección.');
   if (!Array.isArray(p.items) || !p.items.length) throw new Error('El carrito está vacío.');
@@ -743,7 +769,7 @@ function db_(){ return SpreadsheetApp.openById(STORE_DB_ID); }
 function sheet_(name){ const sh=db_().getSheetByName(name); if(!sh)throw new Error(`Falta la pestaña ${name}.`); return sh; }
 function headers_(name){ const sh=sheet_(name); const last=Math.max(1,sh.getLastColumn()); return sh.getRange(1,1,1,last).getValues()[0].map(String); }
 function rows_(name){ const sh=sheet_(name); const h=headers_(name); const lr=sh.getLastRow(); if(lr<2)return[]; return sh.getRange(2,1,lr-1,h.length).getValues().map((vals,i)=>{const o={_row:i+2};h.forEach((k,j)=>o[k]=vals[j]);return o;}); }
-function appendByHeaders_(name,obj){ const sh=sheet_(name),h=headers_(name); sh.appendRow(h.map(k=>obj[k]===undefined?'':obj[k])); }
+function appendByHeaders_(name,obj){ const sh=sheet_(name),h=headers_(name); sh.appendRow(h.map(k=>obj[k]===undefined?'':obj[k])); return sh.getLastRow(); }
 function updateRowByHeaders_(name,row,obj){ const sh=sheet_(name),h=headers_(name),current=sh.getRange(row,1,1,h.length).getValues()[0]; h.forEach((k,i)=>{if(obj[k]!==undefined)current[i]=obj[k]}); sh.getRange(row,1,1,h.length).setValues([current]); }
 function setCellByHeader_(name,row,header,value){ const sh=sheet_(name),h=headers_(name),idx=h.indexOf(header); if(idx<0)throw new Error(`Falta columna ${header}.`); sh.getRange(row,idx+1).setValue(value); }
 function findBy_(name,header,value){ return rows_(name).find(r=>String(r[header])===String(value)); }
@@ -765,6 +791,7 @@ function dateOnlyInput_(v){
 function inDateWindow_(r,now){ const today=Utilities.formatDate(now||new Date(),TIMEZONE,'yyyy-MM-dd'),a=dateOnlyInput_(r.fecha_inicio),b=dateOnlyInput_(r.fecha_fin);if(a&&today<a)return false;if(b&&today>b)return false;return true; }
 function aggregateItemQty_(items){ const out={};(items||[]).forEach(i=>{const id=String(i.id||'');const q=Math.max(0,Math.floor(num_(i.qty)));if(id&&q)out[id]=(out[id]||0)+q;});return out; }
 function safeHttpUrl_(v){ const s=String(v||'').trim();if(!s)return '';if(!/^https:\/\//i.test(s))throw new Error('Las imágenes deben usar una URL https:// válida.');return s.slice(0,2000); }
+function safeOptionalHttpsUrl_(v){ const s=String(v||'').trim();if(!s)return '';if(!/^https:\/\//i.test(s))throw new Error('La ubicación debe ser un enlace https:// válido.');return s.slice(0,1000); }
 function normalizeImageUrls_(v){ const parts=String(v||'').split(/[|,\n]/).map(x=>x.trim()).filter(Boolean);const unique=[];parts.forEach(x=>{const u=safeHttpUrl_(x);if(unique.indexOf(u)<0)unique.push(u);});return unique.slice(0,12).join('|'); }
 function makeId_(prefix){ return `${prefix}-${Utilities.formatDate(new Date(),'America/Lima','yyyyMMdd')}-${Utilities.getUuid().slice(0,6).toUpperCase()}`; }
 function nextProductId_(products){ let max=0;products.forEach(p=>{const m=String(p.id||'').match(/PRD-(\d+)/);if(m)max=Math.max(max,Number(m[1]))});return `PRD-${String(max+1).padStart(3,'0')}`; }
