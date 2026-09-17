@@ -75,6 +75,35 @@
     renderCart();
     renderZones();
     setMinDate();
+    applyStoreStatus();
+  }
+
+  function applyStoreStatus(){
+    const status=String(state.data.config.STORE_STATUS||'open').toLowerCase();
+    const open=status==='open';
+    const start=$('#checkoutStart');
+    const reserve=$('#reserveButton');
+    if(start){
+      start.disabled=!open;
+      start.textContent=open?'Continuar con la separación →':status==='paused'?'Reservas pausadas temporalmente':'Tienda cerrada temporalmente';
+    }
+    if(reserve) reserve.disabled=!open;
+    let banner=document.getElementById('storeStatusBanner');
+    if(!open){
+      if(!banner){
+        banner=document.createElement('div');
+        banner.id='storeStatusBanner';
+        banner.className='store-status-banner';
+        const header=document.querySelector('.site-header');
+        if(header) header.insertAdjacentElement('afterend',banner);
+      }
+      banner.textContent=status==='paused'
+        ? 'Estamos pausando nuevas reservas por el momento. Puedes revisar el catálogo y volver más tarde.'
+        : 'La tienda no está recibiendo nuevas reservas en este momento.';
+      banner.hidden=false;
+    }else if(banner){
+      banner.hidden=true;
+    }
   }
 
   function categoryById(id){ return state.data.categories.find(c=>c.categoria_id===id); }
@@ -196,6 +225,7 @@
   function localDateString(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
   function setMinDate(){const d=new Date();d.setHours(d.getHours()+Number(state.data.config.MIN_NOTICE_HOURS||6));const input=$('[name="deliveryDate"]');if(input)input.min=localDateString(d);}
   function openCheckout(){
+    if(String(state.data.config.STORE_STATUS||'open').toLowerCase()!=='open')return toast('La tienda no está recibiendo reservas en este momento.');
     if(!state.cart.length)return toast('Agrega al menos un producto.');
     const msg=$('#checkoutMessage');
     if(!state.apiReady){msg.hidden=false;msg.textContent='La separación de stock todavía no está activa. Estamos terminando la conexión segura de la tienda.';}else msg.hidden=true;
