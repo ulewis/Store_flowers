@@ -1,0 +1,39 @@
+name: Frontend validation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in assets/*.js; do
+            echo "Checking $f"
+            node --check "$f"
+          done
+      - name: Check required storefront files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f index.html
+          test -f admin.html
+          test -f assets/app.js
+          test -f assets/admin.js
+          test -f assets/config.js
+          test -f assets/mobile-fixes.css
+          test -f assets/admin-functional.css
+      - name: Check current Apps Script endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "AKfycbyIAkvM1KW15nWVB3hS86WYAcFAIuwUcFLDYKhIgEFZlbipzR8JJ-2uesPvPjXf2MIr" assets/config.js
