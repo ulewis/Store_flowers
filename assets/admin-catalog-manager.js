@@ -76,8 +76,9 @@
     if(!section || document.getElementById('newDeliveryManager')) return;
     const card=document.createElement('div');card.id='newDeliveryManager';card.className='admin-card catalog-manager-card';
     card.innerHTML=`
-      <div class="catalog-manager-heading"><div><h2>Nueva zona de delivery</h2><p>Agrega distritos o zonas adicionales cuando lo necesites.</p></div></div>
+      <div class="catalog-manager-heading"><div><h2>Nueva / editar zona de delivery</h2><p>Agrega distritos o modifica todos los datos de una zona existente.</p></div></div>
       <form id="newDeliveryForm" class="catalog-manager-form">
+        <input type="hidden" name="zona_id">
         <label>Nombre de zona<input name="nombre" required placeholder="Los Ejidos"></label>
         <label>Distrito<input name="distrito" required placeholder="Piura"></label>
         <label>Costo S/<input name="costo" type="number" min="0" step="0.5" value="0"></label>
@@ -85,8 +86,9 @@
         <label class="wide">Nota<textarea name="nota" placeholder="Costo referencial sujeto a dirección exacta."></textarea></label>
         <label class="check"><input name="requiere_cotizacion" type="checkbox" checked> Cotizar antes de confirmar</label>
         <label class="check"><input name="activo" type="checkbox" checked> Activa</label>
-        <div class="catalog-manager-actions"><button class="save" type="submit">Agregar zona</button><button class="clear" type="reset">Limpiar</button></div>
-      </form>`;
+        <div class="catalog-manager-actions"><button class="save" type="submit">Guardar zona</button><button class="clear" type="button" id="clearDeliveryManager">Nueva</button></div>
+      </form>
+      <div id="deliveryManagerList" class="catalog-manager-list"><div class="manager-loading">Cargando zonas…</div></div>`;
     section.insertBefore(card,section.firstElementChild);
   }
 
@@ -111,8 +113,29 @@
     const f=document.getElementById('categoryManagerForm');if(!f)return;f.reset();f.elements.categoria_id.value='';f.elements.orden.value='99';f.elements.activo.checked=true;
   }
 
+  function renderDeliveryManager(){
+    const list=document.getElementById('deliveryManagerList');if(!list||!snapshot)return;
+    const zones=[...(snapshot.delivery||[])].sort((a,b)=>Number(a.orden||99)-Number(b.orden||99));
+    list.innerHTML=zones.length?zones.map(z=>'<div class="catalog-manager-row"><div><strong>'+esc(z.nombre)+'</strong><small>'+(bool(z.activo)?'Activa':'Inactiva')+' · '+(bool(z.requiere_cotizacion)?'Cotizar':'S/ '+Number(z.costo||0).toFixed(2))+'</small></div><div class="description">'+esc(z.distrito||'')+(z.nota?' · '+esc(z.nota):'')+'</div><div class="order">#'+Number(z.orden||0)+'</div><button type="button" data-edit-delivery-full="'+esc(z.zona_id)+'">Editar</button></div>').join(''):'<div class="manager-loading">No hay zonas.</div>';
+    list.querySelectorAll('[data-edit-delivery-full]').forEach(b=>b.onclick=()=>fillDelivery(b.dataset.editDeliveryFull));
+  }
+
+  function fillDelivery(id){
+    const z=(snapshot?.delivery||[]).find(x=>String(x.zona_id)===String(id));if(!z)return;
+    const f=document.getElementById('newDeliveryForm');
+    ['zona_id','nombre','distrito','costo','orden','nota'].forEach(k=>{if(f.elements[k])f.elements[k].value=z[k]??'';});
+    f.elements.requiere_cotizacion.checked=bool(z.requiere_cotizacion);
+    f.elements.activo.checked=bool(z.activo);
+    f.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  function clearDelivery(){
+    const f=document.getElementById('newDeliveryForm');if(!f)return;
+    f.reset();f.elements.zona_id.value='';f.elements.orden.value='99';f.elements.costo.value='0';f.elements.requiere_cotizacion.checked=true;f.elements.activo.checked=true;
+  }
+
   async function refresh(){
-    try{snapshot=await getSnapshot();renderCategories();}
+    try{snapshot=await getSnapshot();renderCategories();renderDeliveryManager();}
     catch(e){const l=document.getElementById('categoryManagerList');if(l)l.innerHTML=`<div class="manager-loading">${esc(e.message)}</div>`;}
   }
 
@@ -121,7 +144,8 @@
     if(cf)cf.onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));try{await post('adminSaveCategory',{...d,orden:Number(d.orden||99),activo:f.elements.activo.checked});notify('Categoría guardada');clearCategory();await refresh();}catch(err){notify(err.message,true);}};
     const cc=document.getElementById('clearCategoryManager');if(cc)cc.onclick=clearCategory;
     const df=document.getElementById('newDeliveryForm');
-    if(df)df.onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));try{await post('adminSaveDelivery',{zona_id:'',nombre:d.nombre,distrito:d.distrito,costo:Number(d.costo||0),requiere_cotizacion:f.elements.requiere_cotizacion.checked,activo:f.elements.activo.checked,orden:Number(d.orden||99),nota:d.nota||''});notify('Zona agregada');f.reset();f.elements.orden.value='99';f.elements.requiere_cotizacion.checked=true;f.elements.activo.checked=true;setTimeout(()=>location.reload(),600);}catch(err){notify(err.message,true);}};
+    if(df)df.onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));try{await post('adminSaveDelivery',{zona_id:d.zona_id||'',nombre:d.nombre,distrito:d.distrito,costo:Number(d.costo||0),requiere_cotizacion:f.elements.requiere_cotizacion.checked,activo:f.elements.activo.checked,orden:Number(d.orden||99),nota:d.nota||''});notify(d.zona_id?'Zona actualizada':'Zona agregada');clearDelivery();await refresh();setTimeout(()=>document.getElementById('refreshAdmin')?.click(),150);}catch(err){notify(err.message,true);}};
+    const cd=document.getElementById('clearDeliveryManager');if(cd)cd.onclick=clearDelivery;
   }
 
   function mount(){
