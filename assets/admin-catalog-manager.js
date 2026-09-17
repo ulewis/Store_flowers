@@ -14,7 +14,7 @@
       if(j.ok!==false)return j.data||j;
       if(!String(j.error||'').includes('Acción no válida'))throw new Error(j.error||'No se pudo cargar la configuración.');
     }catch(e){
-      if(!String(e.message||'').includes('Acción no válida')){/* usa compatibilidad GET */}
+      if(!String(e.message||'').includes('Acción no válida'))throw e;
     }
     const u = new URL(cfg.API_URL);
     u.searchParams.set('action','adminSnapshot');
