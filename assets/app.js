@@ -33,6 +33,20 @@
 
   function loadCart(){ try { return JSON.parse(localStorage.getItem('sf_cart') || '[]'); } catch { return []; } }
   function saveCart(){ localStorage.setItem('sf_cart', JSON.stringify(state.cart)); renderCart(); }
+  function reconcileCart(){
+    let changed=false;
+    const next=[];
+    state.cart.forEach(item=>{
+      const p=state.data.products.find(x=>String(x.id)===String(item.id));
+      if(!p || !p.activo || Number(p.available_stock||0)<=0){changed=true;return;}
+      const qty=Math.max(1,Math.min(Number(item.qty||1),Number(p.available_stock||0)));
+      if(qty!==Number(item.qty||1))changed=true;
+      next.push({...item,qty});
+    });
+    state.cart=next;
+    localStorage.setItem('sf_cart',JSON.stringify(state.cart));
+    return changed;
+  }
   function parseBool(v){ return v === true || String(v).toLowerCase() === 'true'; }
   function toNum(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
   function normalize(data){
@@ -68,6 +82,7 @@
         console.warn('Backend no disponible; se muestra el catálogo local sin permitir reservas reales.',err);
       }
     }
+    const cartAdjusted=reconcileCart();
     document.title=`${state.data.config.STORE_NAME||cfg.STORE_NAME||'Store Flowers'} | Detalles para momentos especiales`;
     $$('[data-store-name]').forEach(el=>el.textContent=state.data.config.STORE_NAME||cfg.STORE_NAME||'Store Flowers');
     renderCategories();
@@ -76,6 +91,7 @@
     renderZones();
     setMinDate();
     applyStoreStatus();
+    if(cartAdjusted) setTimeout(()=>toast('Actualizamos tu carrito según el stock disponible.'),250);
   }
 
   function applyStoreStatus(){
