@@ -42,7 +42,7 @@ jobs:
       - name: POST parser check without creating a reservation
         shell: bash
         run: |
-          RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 -X POST \
+          RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 \
             -H 'Content-Type: text/plain;charset=utf-8' \
             --data '{"action":"reserve","payload":{}}' \
             "$API_URL")
