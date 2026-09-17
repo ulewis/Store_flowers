@@ -338,15 +338,13 @@ function cancelReservation_(reservationId) {
     const r = findBy_(SHEETS.RESERVATIONS,'reserva_id',reservationId);
     if (!r) throw new Error('Reserva no encontrada.');
     if (String(r.estado).toUpperCase() !== 'PENDIENTE') throw new Error('La reserva ya no está pendiente.');
-    releaseStockForReservation_(r);
-    setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado','CANCELADA');
+    releaseReservationStockAndSetStatus_(r,'CANCELADA');
     audit_('admin','CANCELAR','reserva',r.reserva_id,{});
     return {reserva_id:r.reserva_id};
   } finally {
     lock.releaseLock();
   }
 }
-
 function updateOrder_(p) {
   const orderId = String((p && p.pedido_id) || '').trim();
   if (!orderId) throw new Error('Falta el pedido.');
@@ -363,7 +361,25 @@ function updateOrder_(p) {
     if (current === 'ENTREGADO' && status !== 'ENTREGADO') throw new Error('Un pedido entregado no puede volver a otro estado.');
     if (current === 'CANCELADO' && status !== 'CANCELADO') throw new Error('Un pedido cancelado no puede reactivarse.');
 
-    if (status === 'CANCELADO' && current !== 'CANCELADO') restoreStockForOrder_(row);
+    const restored = [];
+    if (status === 'CANCELADO' && current !== 'CANCELADO') {
+      const qtyById = aggregateItemQty_(parseItems_(row.items_json));
+      const products = rows_(SHEETS.PRODUCTS);
+      const byId = {};
+      products.forEach(x => byId[String(x.id)] = x);
+      try {
+        Object.keys(qtyById).forEach(id => {
+          const pr = byId[id];
+          if (!pr) return;
+          const oldStock = num_(pr.stock_fisico);
+          setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',oldStock+qtyById[id]);
+          restored.push({row:pr._row,oldStock});
+        });
+      } catch (err) {
+        restored.forEach(x=>{try{setCellByHeader_(SHEETS.PRODUCTS,x.row,'stock_fisico',x.oldStock);}catch(e){}});
+        throw err;
+      }
+    }
 
     const changes = {estado:status};
     if (hasValue_(p.delivery)) {
@@ -375,7 +391,12 @@ function updateOrder_(p) {
     if (p.notas_admin !== undefined) changes.notas_admin = String(p.notas_admin || '').slice(0,500);
     if (status === 'ENTREGADO' && !row.fecha_entrega_real) changes.fecha_entrega_real = new Date();
 
-    updateRowByHeaders_(SHEETS.ORDERS,row._row,changes);
+    try {
+      updateRowByHeaders_(SHEETS.ORDERS,row._row,changes);
+    } catch (err) {
+      restored.forEach(x=>{try{setCellByHeader_(SHEETS.PRODUCTS,x.row,'stock_fisico',x.oldStock);}catch(e){}});
+      throw err;
+    }
     audit_('admin','ACTUALIZAR','pedido',row.pedido_id,{...changes,estado_anterior:current});
     return {pedido_id:row.pedido_id,...changes};
   } finally {
@@ -535,36 +556,39 @@ function releaseExpiredReservationsNoLock_() {
     if (String(r.estado).toUpperCase() !== 'PENDIENTE') return;
     const expiry = date_(r.fecha_expiracion);
     if (!expiry || expiry.getTime() > now.getTime()) return;
-    releaseStockForReservation_(r);
-    setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado','EXPIRADA');
-    audit_('sistema','EXPIRAR','reserva',r.reserva_id,{});
-    count++;
+    try {
+      releaseReservationStockAndSetStatus_(r,'EXPIRADA');
+      audit_('sistema','EXPIRAR','reserva',r.reserva_id,{});
+      count++;
+    } catch (err) {
+      audit_('sistema','ERROR_EXPIRAR','reserva',r.reserva_id,{error:safeError_(err)});
+    }
   });
   return {released:count};
 }
 
-function releaseStockForReservation_(r) {
+function releaseReservationStockAndSetStatus_(r,newStatus) {
   const qtyById = aggregateItemQty_(parseItems_(r.items_json));
   const products = rows_(SHEETS.PRODUCTS);
   const byId = {};
   products.forEach(x => byId[String(x.id)] = x);
-  Object.keys(qtyById).forEach(id => {
-    const pr = byId[id];
-    if (pr) setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',Math.max(0,num_(pr.stock_reservado)-qtyById[id]));
-  });
+  const changed = [];
+  try {
+    Object.keys(qtyById).forEach(id => {
+      const pr = byId[id];
+      if (!pr) return;
+      const oldReserved = num_(pr.stock_reservado);
+      const nextReserved = Math.max(0,oldReserved-qtyById[id]);
+      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',nextReserved);
+      changed.push({row:pr._row,oldReserved});
+    });
+    setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado',newStatus);
+  } catch (err) {
+    changed.forEach(x=>{try{setCellByHeader_(SHEETS.PRODUCTS,x.row,'stock_reservado',x.oldReserved);}catch(e){}});
+    try{setCellByHeader_(SHEETS.RESERVATIONS,r._row,'estado',r.estado);}catch(e){}
+    throw err;
+  }
 }
-
-function restoreStockForOrder_(order) {
-  const qtyById = aggregateItemQty_(parseItems_(order.items_json));
-  const products = rows_(SHEETS.PRODUCTS);
-  const byId = {};
-  products.forEach(x => byId[String(x.id)] = x);
-  Object.keys(qtyById).forEach(id => {
-    const pr = byId[id];
-    if (pr) setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico)+qtyById[id]);
-  });
-}
-
 function sendReservationEmail_(id,p,items,zone,subtotal,delivery,total,expires) {
   const cfg = configMap_();
   const recipients = String(cfg.ADMIN_EMAIL || '').split(/[;,]/).map(x => x.trim()).filter(Boolean);
