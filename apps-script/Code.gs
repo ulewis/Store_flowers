@@ -1,6 +1,11 @@
 const STORE_DB_ID = '1CU1g1v_xLceeDfGVwQw70W5xtxLiSEFa9u-WuGUlc1k';
 const SHEETS = { PRODUCTS:'Productos', RESERVATIONS:'Reservas', ORDERS:'Pedidos', DELIVERY:'Delivery', CATEGORIES:'Categorias', CONFIG:'Configuracion', AUDIT:'Auditoria' };
-const API_VERSION = '2026-09-17.4';
+const API_VERSION = '2026-09-17.5';
+const TIMEZONE = 'America/Lima';
+const GITHUB_REPO = 'ulewis/Store_flowers';
+const GITHUB_BRANCH = 'main';
+const GITHUB_PAGES_BASE = 'https://ulewis.github.io/Store_flowers/';
+const MAX_IMAGE_BYTES = 900 * 1024;
 
 function doGet(e) {
   try {
@@ -25,6 +30,10 @@ function doPost(e) {
     if (action === 'reserve') return json_({ok:true, data:reserve_(payload)});
 
     requireAdmin_(payload.token);
+    if (action === 'adminSnapshot') return json_({ok:true, data:adminSnapshot_()});
+    if (action === 'adminSetGitHubToken') return json_({ok:true, data:setGitHubToken_(payload)});
+    if (action === 'adminClearGitHubToken') return json_({ok:true, data:clearGitHubToken_()});
+    if (action === 'adminUploadProductImage') return json_({ok:true, data:uploadProductImage_(payload)});
     if (action === 'adminSetReservationDelivery') return json_({ok:true, data:setReservationDelivery_(payload)});
     if (action === 'adminConfirmReservation') return json_({ok:true, data:confirmReservation_(payload)});
     if (action === 'adminCancelReservation') return json_({ok:true, data:cancelReservation_(payload.reserva_id)});
@@ -71,7 +80,6 @@ function releaseExpiredReservations() {
 }
 
 function bootstrap_() {
-  releaseExpiredReservations();
   const now = new Date();
   const products = rows_(SHEETS.PRODUCTS)
     .filter(p => bool_(p.activo) && inDateWindow_(p, now))
@@ -90,6 +98,7 @@ function adminSnapshot_() {
     delivery: rows_(SHEETS.DELIVERY).map(cleanRow_),
     categories: rows_(SHEETS.CATEGORIES).map(cleanRow_),
     config: configMap_(),
+    integrations: {githubUpload:!!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN'), githubRepo:GITHUB_REPO},
     version: API_VERSION
   };
 }
@@ -114,6 +123,7 @@ function reserve_(p) {
     const byId = {};
     products.forEach(x => byId[String(x.id)] = x);
     const normalizedItems = [];
+    const requestedById = {};
     let subtotal = 0;
     let totalQty = 0;
     const now = new Date();
@@ -125,7 +135,8 @@ function reserve_(p) {
       totalQty += qty;
       if (totalQty > 50) throw new Error('La reserva supera la cantidad máxima permitida.');
       const available = Math.max(0, num_(pr.stock_fisico) - num_(pr.stock_reservado));
-      if (available < qty) throw new Error(`${pr.nombre}: solo quedan ${available} unidad(es) disponibles.`);
+      requestedById[String(pr.id)] = (requestedById[String(pr.id)] || 0) + qty;
+      if (available < requestedById[String(pr.id)]) throw new Error(`${pr.nombre}: solo quedan ${available} unidad(es) disponibles.`);
       const price = num_(pr.precio);
       subtotal += price * qty;
       normalizedItems.push({
@@ -147,9 +158,9 @@ function reserve_(p) {
     const expires = new Date(created.getTime() + minutes * 60000);
     const reservationId = makeId_('RSV');
 
-    normalizedItems.forEach(item => {
-      const pr = byId[item.id];
-      setCellByHeader_(SHEETS.PRODUCTS, pr._row, 'stock_reservado', num_(pr.stock_reservado) + item.qty);
+    Object.keys(requestedById).forEach(id => {
+      const pr = byId[id];
+      setCellByHeader_(SHEETS.PRODUCTS, pr._row, 'stock_reservado', num_(pr.stock_reservado) + requestedById[id]);
     });
 
     appendByHeaders_(SHEETS.RESERVATIONS, {
@@ -245,13 +256,19 @@ function confirmReservation_(p) {
     const byId = {};
     products.forEach(x => byId[String(x.id)] = x);
 
-    items.forEach(item => {
-      const pr = byId[String(item.id)];
+    const qtyById = aggregateItemQty_(items);
+    Object.keys(qtyById).forEach(id => {
+      const pr = byId[id];
       if (!pr) throw new Error('Producto de la reserva no encontrado.');
-      const qty = num_(item.qty);
+      const qty = qtyById[id];
       if (num_(pr.stock_reservado) < qty) throw new Error(`${pr.nombre}: el stock reservado ya no coincide. Revisa la reserva.`);
-      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',Math.max(0,num_(pr.stock_fisico)-qty));
-      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',Math.max(0,num_(pr.stock_reservado)-qty));
+      if (num_(pr.stock_fisico) < qty) throw new Error(`${pr.nombre}: el stock físico ya no es suficiente. Revisa el inventario.`);
+    });
+    Object.keys(qtyById).forEach(id => {
+      const pr = byId[id];
+      const qty = qtyById[id];
+      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico)-qty);
+      setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',num_(pr.stock_reservado)-qty);
     });
 
     const total = num_(r.subtotal) + delivery;
@@ -310,64 +327,86 @@ function cancelReservation_(reservationId) {
 }
 
 function updateOrder_(p) {
-  const row = findBy_(SHEETS.ORDERS,'pedido_id',p.pedido_id);
-  if (!row) throw new Error('Pedido no encontrado.');
+  const orderId = String((p && p.pedido_id) || '').trim();
+  if (!orderId) throw new Error('Falta el pedido.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const row = findBy_(SHEETS.ORDERS,'pedido_id',orderId);
+    if (!row) throw new Error('Pedido no encontrado.');
 
-  const allowed = ['CONFIRMADO','PREPARANDO','LISTO','ENVIADO','ENTREGADO','CANCELADO'];
-  const status = String(p.estado || row.estado || '').toUpperCase();
-  if (allowed.indexOf(status) < 0) throw new Error('Estado no válido.');
+    const allowed = ['CONFIRMADO','PREPARANDO','LISTO','ENVIADO','ENTREGADO','CANCELADO'];
+    const current = String(row.estado || '').toUpperCase();
+    const status = String(p.estado || current || '').toUpperCase();
+    if (allowed.indexOf(status) < 0) throw new Error('Estado no válido.');
+    if (current === 'ENTREGADO' && status !== 'ENTREGADO') throw new Error('Un pedido entregado no puede volver a otro estado.');
+    if (current === 'CANCELADO' && status !== 'CANCELADO') throw new Error('Un pedido cancelado no puede reactivarse.');
 
-  const changes = {estado:status};
-  if (hasValue_(p.delivery)) {
-    const delivery = Math.max(0,num_(p.delivery));
-    changes.delivery = delivery;
-    changes.total = num_(row.subtotal) + delivery;
+    if (status === 'CANCELADO' && current !== 'CANCELADO') restoreStockForOrder_(row);
+
+    const changes = {estado:status};
+    if (hasValue_(p.delivery)) {
+      const delivery = Math.max(0,num_(p.delivery));
+      changes.delivery = delivery;
+      changes.total = num_(row.subtotal) + delivery;
+    }
+    if (p.metodo_pago !== undefined) changes.metodo_pago = String(p.metodo_pago || '').slice(0,80);
+    if (p.notas_admin !== undefined) changes.notas_admin = String(p.notas_admin || '').slice(0,500);
+    if (status === 'ENTREGADO' && !row.fecha_entrega_real) changes.fecha_entrega_real = new Date();
+
+    updateRowByHeaders_(SHEETS.ORDERS,row._row,changes);
+    audit_('admin','ACTUALIZAR','pedido',row.pedido_id,{...changes,estado_anterior:current});
+    return {pedido_id:row.pedido_id,...changes};
+  } finally {
+    lock.releaseLock();
   }
-  if (p.metodo_pago !== undefined) changes.metodo_pago = String(p.metodo_pago || '').slice(0,80);
-  if (p.notas_admin !== undefined) changes.notas_admin = String(p.notas_admin || '').slice(0,500);
-  if (status === 'ENTREGADO' && !row.fecha_entrega_real) changes.fecha_entrega_real = new Date();
-
-  updateRowByHeaders_(SHEETS.ORDERS,row._row,changes);
-  audit_('admin','ACTUALIZAR','pedido',row.pedido_id,changes);
-  return {pedido_id:row.pedido_id,...changes};
 }
-
 function saveProduct_(p) {
-  if (!String(p.nombre || '').trim()) throw new Error('El producto necesita nombre.');
-  const products = rows_(SHEETS.PRODUCTS);
-  const row = p.id ? products.find(x => String(x.id) === String(p.id)) : null;
-  const id = row ? String(row.id) : nextProductId_(products);
-  const stockFisico = Math.max(0,num_(p.stock_fisico));
-  const stockReservado = row ? num_(row.stock_reservado) : 0;
-  if (stockFisico < stockReservado) throw new Error(`El stock físico no puede ser menor al stock reservado (${stockReservado}).`);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    if (!String(p.nombre || '').trim()) throw new Error('El producto necesita nombre.');
+    const categoryId = String(p.categoria_id || '').trim();
+    if (categoryId && !findBy_(SHEETS.CATEGORIES,'categoria_id',categoryId)) throw new Error('La categoría seleccionada no existe.');
 
-  const record = {
-    id,
-    nombre:String(p.nombre).trim(),
-    slug:slug_(p.nombre),
-    categoria_id:String(p.categoria_id || ''),
-    descripcion:String(p.descripcion || ''),
-    precio:Math.max(0,num_(p.precio)),
-    stock_fisico:stockFisico,
-    stock_reservado:stockReservado,
-    activo:bool_(p.activo),
-    destacado:bool_(p.destacado),
-    imagen_principal:String(p.imagen_principal || ''),
-    imagenes:String(p.imagenes || ''),
-    etiqueta_stock:String(p.etiqueta_stock || ''),
-    personalizable:bool_(p.personalizable),
-    orden:num_(p.orden || 99),
-    fecha_inicio:p.fecha_inicio !== undefined ? String(p.fecha_inicio || '').slice(0,20) : (row ? row.fecha_inicio || '' : ''),
-    fecha_fin:p.fecha_fin !== undefined ? String(p.fecha_fin || '').slice(0,20) : (row ? row.fecha_fin || '' : '')
-  };
-  if (record.fecha_inicio && record.fecha_fin && String(record.fecha_fin) < String(record.fecha_inicio)) throw new Error('La fecha final del producto no puede ser anterior a la fecha inicial.');
+    const products = rows_(SHEETS.PRODUCTS);
+    const row = p.id ? products.find(x => String(x.id) === String(p.id)) : null;
+    const id = row ? String(row.id) : nextProductId_(products);
+    const stockFisico = Math.max(0,Math.floor(num_(p.stock_fisico)));
+    const stockReservado = row ? Math.max(0,Math.floor(num_(row.stock_reservado))) : 0;
+    if (stockFisico < stockReservado) throw new Error(`El stock físico no puede ser menor al stock reservado (${stockReservado}).`);
 
-  if (row) updateRowByHeaders_(SHEETS.PRODUCTS,row._row,record);
-  else appendByHeaders_(SHEETS.PRODUCTS,record);
-  audit_('admin','GUARDAR','producto',id,record);
-  return {id};
+    const mainImage = safeHttpUrl_(p.imagen_principal);
+    const extraImages = normalizeImageUrls_(p.imagenes);
+    const record = {
+      id,
+      nombre:String(p.nombre).trim().slice(0,120),
+      slug:slug_(p.nombre),
+      categoria_id:categoryId,
+      descripcion:String(p.descripcion || '').trim().slice(0,1000),
+      precio:Math.max(0,num_(p.precio)),
+      stock_fisico:stockFisico,
+      stock_reservado:stockReservado,
+      activo:bool_(p.activo),
+      destacado:bool_(p.destacado),
+      imagen_principal:mainImage,
+      imagenes:extraImages,
+      etiqueta_stock:String(p.etiqueta_stock || '').trim().slice(0,80),
+      personalizable:bool_(p.personalizable),
+      orden:Math.max(0,Math.floor(num_(p.orden || 99))),
+      fecha_inicio:p.fecha_inicio !== undefined ? dateOnlyInput_(p.fecha_inicio) : (row ? dateOnlyInput_(row.fecha_inicio) : ''),
+      fecha_fin:p.fecha_fin !== undefined ? dateOnlyInput_(p.fecha_fin) : (row ? dateOnlyInput_(row.fecha_fin) : '')
+    };
+    if (record.fecha_inicio && record.fecha_fin && record.fecha_fin < record.fecha_inicio) throw new Error('La fecha final del producto no puede ser anterior a la fecha inicial.');
+
+    if (row) updateRowByHeaders_(SHEETS.PRODUCTS,row._row,record);
+    else appendByHeaders_(SHEETS.PRODUCTS,record);
+    audit_('admin','GUARDAR','producto',id,{...record,imagenes:extraImages ? '[configuradas]' : ''});
+    return {id};
+  } finally {
+    lock.releaseLock();
+  }
 }
-
 function saveDelivery_(p) {
   const zones = rows_(SHEETS.DELIVERY);
   let row = p.zona_id ? zones.find(x => String(x.zona_id) === String(p.zona_id)) : null;
@@ -421,10 +460,11 @@ function saveCategory_(p) {
     emoji:String(p.emoji || '🎁').trim().slice(0,8),
     descripcion:String(p.descripcion || '').trim().slice(0,220),
     activo:bool_(p.activo),
-    orden:num_(p.orden || 99),
-    fecha_inicio:String(p.fecha_inicio || '').slice(0,20),
-    fecha_fin:String(p.fecha_fin || '').slice(0,20)
+    orden:Math.max(0,Math.floor(num_(p.orden || 99))),
+    fecha_inicio:dateOnlyInput_(p.fecha_inicio),
+    fecha_fin:dateOnlyInput_(p.fecha_fin)
   };
+  if (record.fecha_inicio && record.fecha_fin && record.fecha_fin < record.fecha_inicio) throw new Error('La fecha final de la categoría no puede ser anterior a la fecha inicial.');
   if (row) updateRowByHeaders_(SHEETS.CATEGORIES,row._row,record);
   else appendByHeaders_(SHEETS.CATEGORIES,record);
   audit_('admin',row ? 'GUARDAR' : 'CREAR','categoria',id,record);
@@ -435,11 +475,37 @@ function saveConfig_(p) {
   const allowed = ['STORE_NAME','WHATSAPP_NUMBER','ADMIN_EMAIL','RESERVATION_MINUTES','DEFAULT_CITY','DEFAULT_REGION','COUNTRY','STORE_STATUS','MIN_NOTICE_HOURS'];
   const key = String(p.key || '');
   if (allowed.indexOf(key) < 0) throw new Error('Configuración no editable.');
-  setConfigValue_(key,String(p.value ?? ''));
-  audit_('admin','CONFIGURAR','config',key,{});
-  return {key};
-}
+  let value = String(p.value ?? '').trim();
 
+  if (key === 'STORE_NAME' && !value) throw new Error('El nombre de la tienda no puede quedar vacío.');
+  if (key === 'STORE_STATUS') {
+    value = value.toLowerCase();
+    if (['open','paused','closed'].indexOf(value) < 0) throw new Error('STORE_STATUS debe ser open, paused o closed.');
+  }
+  if (key === 'WHATSAPP_NUMBER') {
+    value = value.replace(/\D/g,'');
+    if (value.length < 8 || value.length > 15) throw new Error('Ingresa WhatsApp en formato internacional.');
+  }
+  if (key === 'ADMIN_EMAIL') {
+    const emails = value.split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+    if (!emails.length || emails.some(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x))) throw new Error('Revisa los correos de aviso.');
+    value = emails.join(',');
+  }
+  if (key === 'RESERVATION_MINUTES') {
+    const n = Math.floor(num_(value));
+    if (n < 5 || n > 1440) throw new Error('La reserva debe durar entre 5 y 1440 minutos.');
+    value = String(n);
+  }
+  if (key === 'MIN_NOTICE_HOURS') {
+    const n = Math.floor(num_(value));
+    if (n < 0 || n > 720) throw new Error('La anticipación debe estar entre 0 y 720 horas.');
+    value = String(n);
+  }
+
+  setConfigValue_(key,value);
+  audit_('admin','CONFIGURAR','config',key,{});
+  return {key,value};
+}
 function releaseExpiredReservationsNoLock_() {
   const now = new Date();
   let count = 0;
@@ -456,13 +522,24 @@ function releaseExpiredReservationsNoLock_() {
 }
 
 function releaseStockForReservation_(r) {
-  const items = parseItems_(r.items_json);
+  const qtyById = aggregateItemQty_(parseItems_(r.items_json));
   const products = rows_(SHEETS.PRODUCTS);
   const byId = {};
   products.forEach(x => byId[String(x.id)] = x);
-  items.forEach(item => {
-    const pr = byId[String(item.id)];
-    if (pr) setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',Math.max(0,num_(pr.stock_reservado)-num_(item.qty)));
+  Object.keys(qtyById).forEach(id => {
+    const pr = byId[id];
+    if (pr) setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_reservado',Math.max(0,num_(pr.stock_reservado)-qtyById[id]));
+  });
+}
+
+function restoreStockForOrder_(order) {
+  const qtyById = aggregateItemQty_(parseItems_(order.items_json));
+  const products = rows_(SHEETS.PRODUCTS);
+  const byId = {};
+  products.forEach(x => byId[String(x.id)] = x);
+  Object.keys(qtyById).forEach(id => {
+    const pr = byId[id];
+    if (pr) setCellByHeader_(SHEETS.PRODUCTS,pr._row,'stock_fisico',num_(pr.stock_fisico)+qtyById[id]);
   });
 }
 
@@ -529,11 +606,12 @@ function sendReservationEmail_(id,p,items,zone,subtotal,delivery,total,expires) 
 
 function validateReservation_(p) {
   if (!String(p.name || '').trim()) throw new Error('Falta el nombre del cliente.');
-  if (String(p.phone || '').replace(/\D/g,'').length < 7) throw new Error('Ingresa un WhatsApp válido.');
+  const phoneDigits = String(p.phone || '').replace(/\D/g,'');
+  if (phoneDigits.length < 8 || phoneDigits.length > 15) throw new Error('Ingresa un WhatsApp válido.');
 
   const deliveryDate = String(p.deliveryDate || '').trim();
   if (!deliveryDate) throw new Error('Falta la fecha de entrega.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) throw new Error('La fecha de entrega no es válida.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) || dateOnlyInput_(deliveryDate) !== deliveryDate) throw new Error('La fecha de entrega no es válida.');
   const cfg = configMap_();
   const minHours = Math.max(0, num_(cfg.MIN_NOTICE_HOURS || 0));
   const minDate = Utilities.formatDate(new Date(Date.now() + minHours * 60 * 60 * 1000), 'America/Lima', 'yyyy-MM-dd');
@@ -547,6 +625,87 @@ function validateReservation_(p) {
   if (!Array.isArray(p.items) || !p.items.length) throw new Error('El carrito está vacío.');
   if (p.items.length > 20) throw new Error('Demasiados productos diferentes en una sola reserva.');
 }
+
+function setGitHubToken_(p) {
+  const token = String((p && p.githubToken) || '').trim();
+  if (token.length < 20) throw new Error('El token de GitHub no parece válido.');
+  const test = githubRequestWithToken_(token,'get','/repos/'+GITHUB_REPO,null);
+  if (test && test.permissions && test.permissions.push === false) throw new Error('El token no tiene permiso de escritura en el repositorio.');
+  PropertiesService.getScriptProperties().setProperty('GITHUB_TOKEN',token);
+  audit_('admin','CONFIGURAR','integracion','github',{repo:GITHUB_REPO});
+  return {configured:true,repo:GITHUB_REPO};
+}
+
+function clearGitHubToken_() {
+  PropertiesService.getScriptProperties().deleteProperty('GITHUB_TOKEN');
+  audit_('admin','DESCONECTAR','integracion','github',{repo:GITHUB_REPO});
+  return {configured:false,repo:GITHUB_REPO};
+}
+
+function uploadProductImage_(p) {
+  const token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
+  if (!token) throw new Error('Primero configura la conexión con GitHub en el panel.');
+  const mime = String((p && p.mimeType) || '').toLowerCase();
+  const extByMime = {'image/webp':'webp','image/jpeg':'jpg','image/png':'png'};
+  const ext = extByMime[mime];
+  if (!ext) throw new Error('Formato de imagen no permitido.');
+  const base64 = String((p && p.base64) || '').replace(/^data:[^;]+;base64,/,'').trim();
+  if (!base64) throw new Error('La imagen está vacía.');
+  let bytes;
+  try { bytes = Utilities.base64Decode(base64); } catch (e) { throw new Error('No se pudo leer la imagen.'); }
+  if (bytes.length < 100) throw new Error('La imagen está vacía o dañada.');
+  if (bytes.length > MAX_IMAGE_BYTES) throw new Error('La imagen sigue siendo demasiado pesada después de comprimirla.');
+  validateImageSignature_(bytes,mime);
+
+  const now = new Date();
+  const folder = Utilities.formatDate(now,TIMEZONE,'yyyy/MM');
+  const baseName = slug_((p && (p.productName || p.productId)) || 'producto').slice(0,60) || 'producto';
+  const suffix = Utilities.getUuid().slice(0,8).toLowerCase();
+  const path = 'assets/products/'+folder+'/'+baseName+'-'+suffix+'.'+ext;
+  const response = githubRequestWithToken_(token,'put','/repos/'+GITHUB_REPO+'/contents/'+path,{
+    message:'Agregar imagen de producto: '+baseName,
+    content:Utilities.base64Encode(bytes),
+    branch:GITHUB_BRANCH
+  });
+  const url = GITHUB_PAGES_BASE + path;
+  audit_('admin','SUBIR_IMAGEN','producto',String((p&&p.productId)||''),{path,size:bytes.length,commit:response && response.commit ? response.commit.sha : ''});
+  return {url,path,sizeBytes:bytes.length,commitSha:response && response.commit ? response.commit.sha : ''};
+}
+
+function githubRequestWithToken_(token,method,path,payload) {
+  const options = {
+    method:String(method||'get').toLowerCase(),
+    muteHttpExceptions:true,
+    headers:{
+      'Authorization':'Bearer '+token,
+      'Accept':'application/vnd.github+json',
+      'X-GitHub-Api-Version':'2022-11-28',
+      'User-Agent':'Store-Flowers-Apps-Script'
+    }
+  };
+  if (payload !== null && payload !== undefined) {
+    options.contentType='application/json';
+    options.payload=JSON.stringify(payload);
+  }
+  const res = UrlFetchApp.fetch('https://api.github.com'+path,options);
+  const code = res.getResponseCode();
+  let body={};
+  try { body=JSON.parse(res.getContentText()||'{}'); } catch(e) {}
+  if (code < 200 || code >= 300) {
+    const msg=String(body.message||('GitHub respondió '+code)).slice(0,220);
+    throw new Error('GitHub: '+msg);
+  }
+  return body;
+}
+
+function validateImageSignature_(bytes,mime) {
+  const b=i=>(bytes[i]||0)&255;
+  const okWebp = bytes.length>12 && b(0)===82 && b(1)===73 && b(2)===70 && b(3)===70 && b(8)===87 && b(9)===69 && b(10)===66 && b(11)===80;
+  const okJpeg = bytes.length>3 && b(0)===255 && b(1)===216 && b(2)===255;
+  const okPng = bytes.length>8 && b(0)===137 && b(1)===80 && b(2)===78 && b(3)===71;
+  if ((mime==='image/webp'&&!okWebp)||(mime==='image/jpeg'&&!okJpeg)||(mime==='image/png'&&!okPng)) throw new Error('El contenido de la imagen no coincide con su formato.');
+}
+
 
 function publicConfig_() {
   const c = configMap_();
@@ -594,7 +753,19 @@ function num_(v){ const n=Number(v); return isFinite(n)?n:0; }
 function bool_(v){ return v===true||String(v).toLowerCase()==='true'||String(v)==='1'; }
 function hasValue_(v){ return v !== undefined && v !== null && String(v).trim() !== ''; }
 function date_(v){ if(v instanceof Date)return v;if(!v)return null;const d=new Date(v);return isNaN(d.getTime())?null:d; }
-function inDateWindow_(r,now){ const a=date_(r.fecha_inicio),b=date_(r.fecha_fin);if(a&&a.getTime()>now.getTime())return false;if(b){b.setHours(23,59,59,999);if(b.getTime()<now.getTime())return false;}return true; }
+function dateOnlyInput_(v){
+  if (!v) return '';
+  if (v instanceof Date) return Utilities.formatDate(v,TIMEZONE,'yyyy-MM-dd');
+  const s=String(v).trim().slice(0,10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  const d=new Date(s+'T12:00:00-05:00');
+  if (isNaN(d.getTime()) || Utilities.formatDate(d,TIMEZONE,'yyyy-MM-dd')!==s) return '';
+  return s;
+}
+function inDateWindow_(r,now){ const today=Utilities.formatDate(now||new Date(),TIMEZONE,'yyyy-MM-dd'),a=dateOnlyInput_(r.fecha_inicio),b=dateOnlyInput_(r.fecha_fin);if(a&&today<a)return false;if(b&&today>b)return false;return true; }
+function aggregateItemQty_(items){ const out={};(items||[]).forEach(i=>{const id=String(i.id||'');const q=Math.max(0,Math.floor(num_(i.qty)));if(id&&q)out[id]=(out[id]||0)+q;});return out; }
+function safeHttpUrl_(v){ const s=String(v||'').trim();if(!s)return '';if(!/^https:\/\//i.test(s))throw new Error('Las imágenes deben usar una URL https:// válida.');return s.slice(0,2000); }
+function normalizeImageUrls_(v){ const parts=String(v||'').split(/[|,\n]/).map(x=>x.trim()).filter(Boolean);const unique=[];parts.forEach(x=>{const u=safeHttpUrl_(x);if(unique.indexOf(u)<0)unique.push(u);});return unique.slice(0,12).join('|'); }
 function makeId_(prefix){ return `${prefix}-${Utilities.formatDate(new Date(),'America/Lima','yyyyMMdd')}-${Utilities.getUuid().slice(0,6).toUpperCase()}`; }
 function nextProductId_(products){ let max=0;products.forEach(p=>{const m=String(p.id||'').match(/PRD-(\d+)/);if(m)max=Math.max(max,Number(m[1]))});return `PRD-${String(max+1).padStart(3,'0')}`; }
 function slug_(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
