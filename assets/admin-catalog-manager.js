@@ -8,6 +8,14 @@
 
   async function getSnapshot(){
     if(!cfg.API_URL || !token()) throw new Error('Inicia sesión en administración.');
+    try{
+      const r=await fetch(cfg.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'adminSnapshot',payload:{token:token()}}),redirect:'follow'});
+      const j=await r.json();
+      if(j.ok!==false)return j.data||j;
+      if(!String(j.error||'').includes('Acción no válida'))throw new Error(j.error||'No se pudo cargar la configuración.');
+    }catch(e){
+      if(!String(e.message||'').includes('Acción no válida')){/* usa compatibilidad GET */}
+    }
     const u = new URL(cfg.API_URL);
     u.searchParams.set('action','adminSnapshot');
     u.searchParams.set('token',token());
