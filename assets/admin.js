@@ -22,6 +22,16 @@
 
   async function get(action,params={}){
     if(!cfg.API_URL) throw new Error('Primero debes conectar la URL del Web App en assets/config.js');
+    if(action==='adminSnapshot'){
+      try{
+        const r=await fetch(cfg.API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'adminSnapshot',payload:{...params,token}}),redirect:'follow'});
+        const j=await r.json();
+        if(j.ok!==false)return j.data||j;
+        if(!String(j.error||'').includes('Acción no válida'))throw new Error(j.error||'Acceso denegado');
+      }catch(e){
+        if(!String(e.message||'').includes('Acción no válida')){/* continúa con compatibilidad GET */}
+      }
+    }
     const u=new URL(cfg.API_URL);
     u.searchParams.set('action',action);
     u.searchParams.set('token',token);
