@@ -13,7 +13,7 @@ window.STORE_CONFIG = {
 (() => {
   const isAdmin = /(?:^|\/)admin\.html(?:$|[?#])/.test(location.pathname + location.search + location.hash);
   const scripts = isAdmin
-    ? ['assets/admin-enhancements.js','assets/admin-catalog-manager.js']
+    ? ['assets/admin-enhancements.js','assets/admin-catalog-manager.js','assets/admin-backend-guard.js']
     : ['assets/reservation-status.js'];
   scripts.forEach(src => {
     const script = document.createElement('script');
