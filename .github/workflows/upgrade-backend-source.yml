@@ -1,0 +1,129 @@
+name: Upgrade backend source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/upgrade-backend-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch Apps Script source
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('apps-script/Code.gs')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace("const API_VERSION = '2026-09-17.2';", "const API_VERSION = '2026-09-17.3';")
+
+          route = "    if (action === 'adminSaveCategory') return json_({ok:true, data:saveCategory_(payload)});\n"
+          anchor = "    if (action === 'adminSaveDelivery') return json_({ok:true, data:saveDelivery_(payload)});\n"
+          if route not in text:
+              text = text.replace(anchor, anchor + route)
+
+          old_delivery = re.compile(r"function saveDelivery_\(p\) \{.*?\n\}\n\nfunction saveConfig_", re.S)
+          new_delivery = r'''function saveDelivery_(p) {
+            const zones = rows_(SHEETS.DELIVERY);
+            let row = p.zona_id ? zones.find(x => String(x.zona_id) === String(p.zona_id)) : null;
+
+            if (!row && !String(p.nombre || '').trim()) throw new Error('La zona necesita nombre.');
+
+            if (!row) {
+              let id = 'DEL-' + slug_(p.nombre).toUpperCase().replace(/-/g,'_');
+              if (!id || id === 'DEL-') id = 'DEL-' + Utilities.getUuid().slice(0,6).toUpperCase();
+              if (zones.some(x => String(x.zona_id) === id)) id += '-' + Utilities.getUuid().slice(0,4).toUpperCase();
+              const record = {
+                zona_id:id,
+                nombre:String(p.nombre || '').trim().slice(0,100),
+                distrito:String(p.distrito || p.nombre || '').trim().slice(0,100),
+                costo:Math.max(0,num_(p.costo)),
+                requiere_cotizacion:bool_(p.requiere_cotizacion),
+                activo:bool_(p.activo),
+                orden:num_(p.orden || 99),
+                nota:String(p.nota || '').trim().slice(0,250)
+              };
+              appendByHeaders_(SHEETS.DELIVERY,record);
+              audit_('admin','CREAR','delivery',id,record);
+              return {zona_id:id,created:true};
+            }
+
+            const changes = {
+              nombre:p.nombre !== undefined ? String(p.nombre || '').trim().slice(0,100) : row.nombre,
+              distrito:p.distrito !== undefined ? String(p.distrito || '').trim().slice(0,100) : row.distrito,
+              costo:Math.max(0,num_(p.costo)),
+              requiere_cotizacion:bool_(p.requiere_cotizacion),
+              activo:bool_(p.activo),
+              orden:p.orden !== undefined ? num_(p.orden || 99) : row.orden,
+              nota:p.nota !== undefined ? String(p.nota || '').trim().slice(0,250) : row.nota
+            };
+            updateRowByHeaders_(SHEETS.DELIVERY,row._row,changes);
+            audit_('admin','GUARDAR','delivery',row.zona_id,changes);
+            return {zona_id:row.zona_id,created:false};
+          }
+
+          function saveCategory_(p) {
+            if (!String(p.nombre || '').trim()) throw new Error('La categoría necesita nombre.');
+            const categories = rows_(SHEETS.CATEGORIES);
+            let row = p.categoria_id ? categories.find(x => String(x.categoria_id) === String(p.categoria_id)) : null;
+            let id = row ? String(row.categoria_id) : slug_(p.nombre);
+            if (!id) id = 'categoria-' + Utilities.getUuid().slice(0,6).toLowerCase();
+            if (!row && categories.some(x => String(x.categoria_id) === id)) id += '-' + Utilities.getUuid().slice(0,4).toLowerCase();
+
+            const record = {
+              categoria_id:id,
+              nombre:String(p.nombre || '').trim().slice(0,100),
+              emoji:String(p.emoji || '🎁').trim().slice(0,8),
+              descripcion:String(p.descripcion || '').trim().slice(0,220),
+              activo:bool_(p.activo),
+              orden:num_(p.orden || 99),
+              fecha_inicio:String(p.fecha_inicio || '').slice(0,20),
+              fecha_fin:String(p.fecha_fin || '').slice(0,20)
+            };
+            if (row) updateRowByHeaders_(SHEETS.CATEGORIES,row._row,record);
+            else appendByHeaders_(SHEETS.CATEGORIES,record);
+            audit_('admin',row ? 'GUARDAR' : 'CREAR','categoria',id,record);
+            return {categoria_id:id,created:!row};
+          }
+
+          function saveConfig_'''
+
+          if not old_delivery.search(text):
+              raise SystemExit('No se encontró saveDelivery_ para actualizar')
+          text = old_delivery.sub(new_delivery, text, count=1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          grep -q "API_VERSION = '2026-09-17.3'" apps-script/Code.gs
+          grep -q "adminSaveCategory" apps-script/Code.gs
+          grep -q "function saveCategory_" apps-script/Code.gs
+          grep -q "created:true" apps-script/Code.gs
+
+      - name: Commit backend upgrade
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps-script/Code.gs
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git commit -m "Ampliar backend para categorías y zonas"
+          git push
