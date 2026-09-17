@@ -1,6 +1,6 @@
 window.STORE_CONFIG = {
   STORE_NAME: 'Store Flowers',
-  API_URL: 'https://script.google.com/macros/s/AKfycbydlj7_SiUiVNgcIHZIFSHdThgm2lxWKZJztTbuE4M3qq3cnXvVEj7namoNklUPRTWw/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbyIAkvM1KW15nWVB3hS86WYAcFAIuwUcFLDYKhIgEFZlbipzR8JJ-2uesPvPjXf2MIr/exec',
   PUBLIC_WHATSAPP: '51956892798',
   RESERVATION_MINUTES: 30,
   DEFAULT_CITY: 'Piura',
