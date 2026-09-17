@@ -419,7 +419,7 @@ function saveProduct_(p) {
     if (stockFisico < stockReservado) throw new Error(`El stock físico no puede ser menor al stock reservado (${stockReservado}).`);
 
     const mainImage = safeHttpUrl_(p.imagen_principal);
-    const extraImages = normalizeImageUrls_(p.imagenes);
+    const extraImages = normalizeImageUrls_(p.imagenes).split('|').filter(u=>u&&u!==mainImage).join('|');
     const record = {
       id,
       nombre:String(p.nombre).trim().slice(0,120),
