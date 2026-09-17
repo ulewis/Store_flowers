@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#211e1e">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Administración | Store Flowers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="admin-body">
+  <section class="admin-login" id="adminLogin">
+    <div class="brand"><span class="brand-mark">✿</span><span><strong data-store-name>Store Flowers</strong><small>administración</small></span></div>
+    <h1>Panel de tienda</h1>
+    <p>Ingresa el token privado generado al configurar Google Apps Script. Se guarda únicamente en este navegador.</p>
+    <label class="field"><span>Token de administración</span><input id="adminToken" type="password" autocomplete="current-password" placeholder="••••••••••••••••"></label>
+    <button class="primary-button full" id="adminLoginButton">Ingresar</button>
+    <div class="form-message" id="adminLoginMessage" hidden></div>
+  </section>
+
+  <div class="admin-shell hidden" id="adminApp">
+    <aside class="admin-sidebar">
+      <a class="brand" href="index.html"><span class="brand-mark">✿</span><span><strong data-store-name>Store Flowers</strong><small>administración</small></span></a>
+      <nav class="admin-nav">
+        <button class="active" data-section="dashboard">▦ Resumen</button>
+        <button data-section="products">◫ Productos</button>
+        <button data-section="reservations">◷ Reservas</button>
+        <button data-section="orders">✓ Pedidos</button>
+        <button data-section="delivery">⌖ Delivery</button>
+        <button data-section="settings">⚙ Configuración</button>
+      </nav>
+    </aside>
+    <main class="admin-main">
+      <header class="admin-topbar"><div><span class="eyebrow">GESTIÓN DE TIENDA</span><h1 id="adminTitle">Resumen</h1></div><div class="admin-actions"><button id="refreshAdmin">↻ Actualizar</button><button id="adminLogout">Salir</button></div></header>
+
+      <section data-admin-section="dashboard">
+        <div class="admin-grid" id="metrics"></div>
+        <div class="admin-card"><h2>Reservas recientes</h2><div id="recentReservations"></div></div>
+        <div class="admin-card"><h2>Stock bajo</h2><div id="lowStock"></div></div>
+      </section>
+
+      <section data-admin-section="products" class="hidden">
+        <div class="admin-card">
+          <h2>Nuevo / editar producto</h2>
+          <form id="productForm" class="admin-inline-form">
+            <input type="hidden" name="id">
+            <label class="field"><span>Nombre</span><input name="nombre" required></label>
+            <label class="field"><span>Categoría</span><select name="categoria_id" id="adminCategorySelect" required></select></label>
+            <label class="field"><span>Precio</span><input name="precio" type="number" step="0.01" min="0" required></label>
+            <label class="field"><span>Stock físico</span><input name="stock_fisico" type="number" min="0" required></label>
+            <label class="field"><span>Etiqueta</span><input name="etiqueta_stock" placeholder="Edición especial"></label>
+            <label class="field"><span>Imagen principal (URL)</span><input name="imagen_principal" type="url" placeholder="https://..."></label>
+            <label class="field"><span>Más imágenes (separadas por |)</span><input name="imagenes" placeholder="https://... | https://..."></label>
+            <label class="field"><span>Orden</span><input name="orden" type="number" value="99"></label>
+            <label class="field field-wide"><span>Descripción</span><textarea name="descripcion" rows="3"></textarea></label>
+            <label class="consent"><input name="activo" type="checkbox" checked> Activo</label>
+            <label class="consent"><input name="destacado" type="checkbox"> Destacado</label>
+            <label class="consent"><input name="personalizable" type="checkbox" checked> Personalizable</label>
+            <button class="primary-button" type="submit">Guardar producto</button>
+            <button class="soft-button" type="button" id="clearProductForm">Limpiar</button>
+          </form>
+        </div>
+        <div class="admin-card"><h2>Productos</h2><div id="productsTable"></div></div>
+      </section>
+
+      <section data-admin-section="reservations" class="hidden"><div class="admin-card"><h2>Reservas</h2><div id="reservationsTable"></div></div></section>
+      <section data-admin-section="orders" class="hidden"><div class="admin-card"><h2>Pedidos</h2><div id="ordersTable"></div></div></section>
+
+      <section data-admin-section="delivery" class="hidden">
+        <div class="admin-card"><h2>Zonas y costos de entrega</h2><p>Si marcas “Cotizar”, el cliente verá “por confirmar”. Si no, el costo se suma automáticamente.</p><div id="deliveryTable"></div></div>
+      </section>
+
+      <section data-admin-section="settings" class="hidden">
+        <div class="admin-card"><h2>Configuración pública</h2><p>WhatsApp y correo se almacenan en la hoja privada; el token de administración permanece en Script Properties.</p><div id="settingsTable"></div></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="assets/config.js"></script>
+  <script src="assets/admin.js"></script>
+</body>
+</html>
