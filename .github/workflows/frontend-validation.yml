@@ -39,6 +39,9 @@ jobs:
           test -f assets/config.js
           test -f assets/mobile-fixes.css
           test -f assets/admin-functional.css
+          test -f assets/admin-product-preview.js
+          test -f assets/admin-backend-guard.js
+          grep -q "2026-09-17.5" apps-script/Code.gs
       - name: Check current Apps Script endpoint
         shell: bash
         run: |
