@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#211e1e">
   <meta name="robots" content="noindex,nofollow">
   <title>Administración | Store Flowers</title>
@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/admin-functional.css">
 </head>
 <body class="admin-body">
   <section class="admin-login" id="adminLogin">
@@ -66,8 +67,21 @@
         <div class="admin-card"><h2>Productos</h2><div id="productsTable"></div></div>
       </section>
 
-      <section data-admin-section="reservations" class="hidden"><div class="admin-card"><h2>Reservas</h2><div id="reservationsTable"></div></div></section>
-      <section data-admin-section="orders" class="hidden"><div class="admin-card"><h2>Pedidos</h2><div id="ordersTable"></div></div></section>
+      <section data-admin-section="reservations" class="hidden">
+        <div class="admin-card">
+          <h2>Reservas</h2>
+          <p class="admin-help">Cuando el delivery está “por cotizar”, escribe el costo exacto antes de confirmar. El total se recalcula automáticamente.</p>
+          <div id="reservationsTable"></div>
+        </div>
+      </section>
+
+      <section data-admin-section="orders" class="hidden">
+        <div class="admin-card">
+          <h2>Pedidos</h2>
+          <p class="admin-help">Puedes actualizar estado, delivery, método de pago y notas internas desde el detalle de cada pedido.</p>
+          <div id="ordersTable"></div>
+        </div>
+      </section>
 
       <section data-admin-section="delivery" class="hidden">
         <div class="admin-card"><h2>Zonas y costos de entrega</h2><p>Si marcas “Cotizar”, el cliente verá “por confirmar”. Si no, el costo se suma automáticamente.</p><div id="deliveryTable"></div></div>
@@ -77,6 +91,16 @@
         <div class="admin-card"><h2>Configuración pública</h2><p>WhatsApp y correo se almacenan en la hoja privada; el token de administración permanece en Script Properties.</p><div id="settingsTable"></div></div>
       </section>
     </main>
+  </div>
+
+  <div class="admin-detail-modal" id="adminDetailModal" aria-hidden="true">
+    <div class="admin-detail-panel" role="dialog" aria-modal="true" aria-labelledby="adminDetailTitle">
+      <div class="admin-detail-head">
+        <div><span class="eyebrow" id="adminDetailEyebrow">DETALLE</span><h2 id="adminDetailTitle">Detalle</h2></div>
+        <button class="close-button" id="adminDetailClose" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <div id="adminDetailContent"></div>
+    </div>
   </div>
 
   <div class="toast" id="toast" role="status"></div>
