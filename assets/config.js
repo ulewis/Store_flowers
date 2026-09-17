@@ -9,3 +9,11 @@ window.STORE_CONFIG = {
   CURRENCY: 'PEN',
   CURRENCY_SYMBOL: 'S/'
 };
+
+(() => {
+  const isAdmin = /(?:^|\/)admin\.html(?:$|[?#])/.test(location.pathname + location.search + location.hash);
+  const script = document.createElement('script');
+  script.src = isAdmin ? 'assets/admin-enhancements.js' : 'assets/reservation-status.js';
+  script.defer = true;
+  document.head.appendChild(script);
+})();
