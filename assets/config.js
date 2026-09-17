@@ -18,6 +18,7 @@ window.STORE_CONFIG = {
   scripts.forEach(src => {
     const script = document.createElement('script');
     script.src = src;
+    script.async = false;
     script.defer = true;
     document.head.appendChild(script);
   });
