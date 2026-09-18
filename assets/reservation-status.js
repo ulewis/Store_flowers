@@ -21,19 +21,20 @@
     if (Number.isNaN(d.getTime())) return '';
     return new Intl.DateTimeFormat('es-PE', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'America/Lima'
     }).format(d);
   }
 
   function mount() {
     if (document.body.classList.contains('admin-body')) return;
-    if (document.querySelector('.last-reservation-banner')) return;
+    document.querySelector('.last-reservation-banner')?.remove();
     const reservation = readLastReservation();
     if (!reservation) return;
 
     const created = reservation.created_at ? new Date(reservation.created_at) : null;
     if (created && !Number.isNaN(created.getTime()) && Date.now() - created.getTime() > 24 * 60 * 60 * 1000) {
-      localStorage.removeItem('sf_last_reservation');
+      try { localStorage.removeItem('sf_last_reservation'); } catch {}
       return;
     }
 
@@ -42,7 +43,8 @@
     const stillReserved = expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > Date.now();
     const expiryText = formatExpiry(reservation.expires_at);
 
-    const style = document.createElement('style');
+    const style = document.getElementById('reservation-banner-style') || document.createElement('style');
+    style.id = 'reservation-banner-style';
     style.textContent = `
       .last-reservation-banner{max-width:1180px;margin:14px auto 0;padding:14px 18px;border:1px solid rgba(33,30,30,.12);border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 10px 28px rgba(44,32,30,.06)}
       .last-reservation-copy{display:flex;align-items:flex-start;gap:12px;min-width:0}.last-reservation-icon{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#fff2e7;flex:0 0 auto}.last-reservation-copy strong{display:block;font-size:14px}.last-reservation-copy small{display:block;margin-top:3px;color:#756e6b;line-height:1.35}.last-reservation-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}.last-reservation-actions a,.last-reservation-actions button{border:0;border-radius:999px;padding:10px 14px;font:600 13px/1 'DM Sans',sans-serif;cursor:pointer;text-decoration:none}.last-reservation-actions a{background:#211e1e;color:#fff}.last-reservation-actions button{background:#f3efec;color:#3b3533}
@@ -74,7 +76,7 @@
     `;
     banner.querySelector('button').addEventListener('click', () => {
       banner.remove();
-      localStorage.removeItem('sf_last_reservation');
+      try { localStorage.removeItem('sf_last_reservation'); } catch {}
     });
 
     const announcement = document.querySelector('.announcement');

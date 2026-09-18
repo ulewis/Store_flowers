@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/mobile-fixes.css">
+  <link rel="stylesheet" href="assets/storefront.css">
 </head>
 <body>
   <div class="announcement">🎁 Detalles personalizados y regalos con atención en Piura · Delivery coordinado por WhatsApp.</div>
@@ -34,40 +35,28 @@
   </header>
 
   <main>
-    <section class="hero">
+    <section class="hero shop-hero" aria-labelledby="heroTitle">
       <div class="hero-copy">
-        <div class="eyebrow">HECHO PARA REGALAR BONITO</div>
-        <h1>Un detalle puede convertir un día común en <em>algo especial.</em></h1>
-        <p>Flores, peluches, globos y pequeños regalos preparados para cumpleaños, graduaciones, aniversarios y fechas especiales.</p>
+        <div class="eyebrow">MAGALY DETALLES · PIURA</div>
+        <h1 id="heroTitle">Pequeños detalles.<br><em>Grandes sonrisas.</em></h1>
+        <p>Flores, peluches y regalos para sorprender a esa persona especial.</p>
         <div class="hero-actions">
-          <a class="primary-button" href="#productos">Ver arreglos <span>→</span></a>
-          <a class="text-link" href="#como-funciona">¿Cómo funciona?</a>
+          <a class="primary-button" href="#productos">Elegir un detalle <span aria-hidden="true">→</span></a>
+          <a class="text-link" href="#como-funciona">Cómo comprar</a>
         </div>
-        <div class="hero-points"><span>✓ Reserva de stock</span><span>✓ Atención por WhatsApp</span><span>✓ Delivery coordinado</span></div>
+        <div class="hero-points"><span>Hechos con cariño</span><span>Delivery en Piura</span></div>
       </div>
-      <div class="hero-art" aria-label="Composición decorativa de flores y regalos">
-        <div class="hero-card hero-card-main">
-          <div class="sunflower-art"><span>🌻</span><span>🌻</span><span>🌻</span></div>
-          <div class="gift-box"><span>para alguien especial</span></div>
-        </div>
-        <div class="floating-note">✨ Personaliza tu mensaje</div>
-        <div class="floating-badge">Desde<br><strong>S/ 15</strong></div>
+      <div class="hero-photos">
+        <figure><img src="assets/products/abejita.webp" alt="Arreglo de abejita con girasol, globo y chocolates" width="220" height="248" fetchpriority="high"><figcaption>Un detalle para alegrar su día</figcaption></figure>
+        <figure><img src="assets/products/ovejita.webp" alt="Arreglo de ovejita con flores y chocolates" width="220" height="248"><figcaption>Preparado con cariño</figcaption></figure>
       </div>
-    </section>
-
-    <section class="section occasions" id="ocasiones">
-      <div class="section-heading">
-        <div><span class="eyebrow">ENCUENTRA TU DETALLE</span><h2>Compra por ocasión</h2></div>
-        <button class="text-link button-link" id="showAllCategories">Ver todas</button>
-      </div>
-      <div class="occasion-grid" id="categoryGrid" aria-live="polite"></div>
     </section>
 
     <section class="section products-section" id="productos">
       <div class="section-heading products-heading">
-        <div><span class="eyebrow">SELECCIÓN ESPECIAL</span><h2>Detalles que enamoran</h2></div>
+        <div><span class="eyebrow">ELIGE TU FAVORITO</span><h2>Detalles que enamoran</h2></div>
         <div class="product-tools">
-          <label class="search-box" id="searchBox"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar arreglos..." autocomplete="off"></label>
+          <label class="search-box" id="searchBox"><span>⌕</span><input id="searchInput" type="search" aria-label="Buscar arreglos" placeholder="Buscar arreglos..." autocomplete="off"></label>
           <select id="sortSelect" aria-label="Ordenar productos">
             <option value="featured">Destacados</option>
             <option value="price-asc">Menor precio</option>
@@ -76,9 +65,15 @@
           </select>
         </div>
       </div>
+      <div class="catalog-occasions" id="ocasiones">
+        <span class="filter-label">Compra por ocasión</span>
+        <div class="occasion-grid" id="categoryGrid" aria-label="Filtrar por ocasión"></div>
+      </div>
+      <div class="catalog-status" id="catalogStatus" role="status"><span id="catalogStatusText">Cargando los detalles disponibles…</span><button type="button" class="soft-button" id="retryCatalog" hidden>Volver a intentar</button></div>
       <div class="active-filter" id="activeFilter" hidden></div>
-      <div class="product-grid" id="productGrid" aria-live="polite"></div>
-      <div class="empty-state" id="emptyProducts" hidden><span>🌷</span><h3>No encontramos productos</h3><p>Prueba otra categoría o búsqueda.</p></div>
+      <div class="product-grid" id="productGrid" aria-live="polite" aria-busy="true"></div>
+      <noscript><p>Activa JavaScript para consultar el stock y reservar. También puedes <a href="https://wa.me/51956892798">consultarnos por WhatsApp</a>.</p></noscript>
+      <div class="empty-state" id="emptyProducts" hidden><span>🌷</span><h3>No encontramos productos</h3><p>Prueba otra ocasión o borra la búsqueda.</p><button type="button" class="soft-button" id="clearFilters">Ver todos los detalles</button></div>
     </section>
 
     <section class="feature-strip section-narrow">
@@ -109,8 +104,8 @@
 
   <div class="overlay" id="overlay" hidden></div>
 
-  <aside class="drawer" id="cartDrawer" aria-label="Carrito" aria-hidden="true">
-    <div class="drawer-header"><div><span class="eyebrow">TU SELECCIÓN</span><h2>Carrito</h2></div><button class="close-button" data-close="cart">×</button></div>
+  <aside class="drawer" id="cartDrawer" role="dialog" aria-modal="true" aria-label="Carrito" aria-hidden="true" inert>
+    <div class="drawer-header"><div><span class="eyebrow">TU SELECCIÓN</span><h2>Carrito</h2></div><button class="close-button" data-close="cart" aria-label="Cerrar carrito">×</button></div>
     <div class="drawer-body" id="cartItems"></div>
     <div class="drawer-footer">
       <div class="cart-summary"><span>Subtotal</span><strong id="cartSubtotal">S/ 0.00</strong></div>
@@ -119,39 +114,61 @@
     </div>
   </aside>
 
-  <section class="modal" id="productModal" role="dialog" aria-modal="true" aria-hidden="true">
-    <button class="close-button modal-close" data-close="product">×</button>
+  <section class="modal" id="productModal" role="dialog" aria-modal="true" aria-labelledby="modalName" aria-hidden="true" inert>
+    <button class="close-button modal-close" data-close="product" aria-label="Cerrar producto">×</button>
     <div class="product-modal-grid">
-      <div class="product-modal-media"><div class="modal-main-image" id="modalMainImage"></div><div class="thumb-row" id="modalThumbs"></div></div>
-      <div class="product-modal-copy"><span class="pill" id="modalCategory"></span><h2 id="modalName"></h2><div class="modal-price" id="modalPrice"></div><p id="modalDescription"></p><div class="stock-line" id="modalStock"></div><label class="field"><span>Mensaje o personalización <small>(opcional)</small></span><textarea id="modalPersonalization" rows="3" maxlength="180" placeholder="Ej.: Feliz cumpleaños, Ana ❤️"></textarea></label><div class="quantity-row"><label>Cantidad</label><div class="qty-control"><button data-modal-qty="minus">−</button><strong id="modalQty">1</strong><button data-modal-qty="plus">+</button></div></div><button class="primary-button full" id="modalAdd">Agregar al carrito</button><small class="muted">Los elementos decorativos, peluches o textos de globos pueden estar sujetos a stock.</small></div>
+      <div class="product-modal-media"><button type="button" class="modal-main-image" id="modalMainImage" aria-label="Ampliar fotografía del producto"></button><small class="image-hint">Toca la foto para ampliarla</small><div class="thumb-row" id="modalThumbs"></div></div>
+      <div class="product-modal-copy"><span class="pill" id="modalCategory"></span><h2 id="modalName"></h2><div class="modal-price" id="modalPrice"></div><p id="modalDescription"></p><button type="button" class="text-link share-product" id="shareProduct">Compartir este detalle ↗</button><div class="stock-line" id="modalStock"></div><label class="field"><span>Mensaje o personalización <small>(opcional)</small></span><textarea id="modalPersonalization" rows="3" maxlength="180" placeholder="Ej.: Feliz cumpleaños, Ana ❤️"></textarea></label><div class="quantity-row"><label>Cantidad</label><div class="qty-control"><button data-modal-qty="minus">−</button><strong id="modalQty">1</strong><button data-modal-qty="plus">+</button></div></div><button class="primary-button full" id="modalAdd">Agregar al carrito</button><small class="muted">Los elementos decorativos, peluches o textos de globos pueden estar sujetos a stock.</small></div>
     </div>
   </section>
 
-  <section class="modal checkout-modal" id="checkoutModal" role="dialog" aria-modal="true" aria-hidden="true">
-    <button class="close-button modal-close" data-close="checkout">×</button>
-    <div class="checkout-head"><span class="eyebrow">SEPARA TU PEDIDO</span><h2>Datos para la entrega</h2><p>Revisaremos el stock y reservaremos los productos antes de abrir WhatsApp.</p></div>
+  <section class="modal checkout-modal" id="checkoutModal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle" aria-hidden="true" inert>
+    <button class="close-button modal-close" data-close="checkout" aria-label="Cerrar compra">×</button>
+    <div class="checkout-head"><span class="eyebrow">SEPARA TU PEDIDO</span><h2 id="checkoutTitle">Tus datos de contacto</h2><p id="checkoutIntro">Primero, tus datos para coordinar el pedido.</p></div>
+    <ol class="checkout-progress" aria-label="Pasos de compra"><li id="contactProgress" aria-current="step">1. Contacto</li><li id="deliveryProgress">2. Entrega</li></ol>
     <form id="checkoutForm">
-      <div class="form-grid">
-        <label class="field"><span>Nombre y apellido *</span><input name="name" required autocomplete="name"></label>
-        <label class="field"><span>WhatsApp *</span><input name="phone" required inputmode="tel" autocomplete="tel" placeholder="999 999 999"></label>
-        <label class="field"><span>Correo <small>(opcional)</small></span><input name="email" type="email" autocomplete="email"></label>
-        <label class="field"><span>Fecha de entrega *</span><input name="deliveryDate" type="date" required></label>
-        <label class="field"><span>Horario aproximado *</span><select name="deliveryWindow" required><option value="">Selecciona</option><option>Mañana (9:00–12:00)</option><option>Tarde (12:00–17:00)</option><option>Noche (17:00–21:00)</option><option>A coordinar</option></select></label>
-        <label class="field"><span>Zona / distrito *</span><select name="zoneId" id="zoneSelect" required><option value="">Selecciona</option></select></label>
-        <label class="field field-wide"><span>Dirección *</span><input name="address" required autocomplete="street-address" placeholder="Calle, número, urbanización..."></label>
-        <label class="field field-wide"><span>Referencia</span><input name="reference" placeholder="Frente a..., portón..., piso..."></label>
-        <div class="field field-wide map-field"><span>Ubicación en Maps</span><div class="map-actions"><input name="mapsUrl" id="mapsUrl" placeholder="Pega un enlace de Google Maps o usa tu ubicación"><button type="button" class="soft-button" id="useLocation">📍 Usar mi ubicación</button><button type="button" class="soft-button" id="openMap">Abrir Maps ↗</button></div><small id="locationStatus">Ayuda a calcular y coordinar mejor el delivery.</small></div>
-        <label class="field field-wide"><span>Dedicatoria <small>(opcional)</small></span><textarea name="dedication" rows="3" maxlength="300" placeholder="Escribe aquí el mensaje de la tarjeta..."></textarea></label>
-        <label class="field field-wide"><span>Observaciones <small>(opcional)</small></span><textarea name="notes" rows="2" maxlength="300" placeholder="Colores, indicaciones u otro detalle..."></textarea></label>
-      </div>
+      <fieldset id="contactStep" class="checkout-step">
+        <legend class="sr-only">Datos de contacto</legend>
+        <div class="form-grid">
+          <label class="field"><span>Nombre y apellido *</span><input name="name" required autocomplete="name" maxlength="100"></label>
+          <label class="field"><span>WhatsApp *</span><input name="phone" type="tel" required inputmode="tel" autocomplete="tel" placeholder="999 999 999" maxlength="20"></label>
+          <label class="field field-wide"><span>Correo <small>(opcional)</small></span><input name="email" type="email" autocomplete="email"></label>
+        </div>
+        <button type="button" class="primary-button full step-next" id="checkoutNext">Continuar con la entrega →</button>
+      </fieldset>
+      <fieldset id="deliveryStep" class="checkout-step" hidden disabled>
+        <legend class="sr-only">Datos de entrega</legend>
+        <div class="form-grid">
+          <label class="field"><span>Fecha de entrega *</span><input name="deliveryDate" type="date" required></label>
+          <label class="field"><span>Horario aproximado *</span><select name="deliveryWindow" required><option value="">Selecciona</option><option>Mañana (9:00–12:00)</option><option>Tarde (12:00–17:00)</option><option>Noche (17:00–21:00)</option><option>A coordinar</option></select></label>
+          <label class="field field-wide"><span>Zona / distrito *</span><select name="zoneId" id="zoneSelect" required><option value="">Selecciona</option></select></label>
+          <label class="field field-wide"><span>Dirección *</span><input name="address" required autocomplete="street-address" placeholder="Calle, número, urbanización..." maxlength="300"></label>
+        </div>
+        <details class="checkout-extras"><summary>Agregar referencia o ubicación <span>(opcional)</span></summary><div class="form-grid">
+          <label class="field field-wide"><span>Referencia</span><input name="reference" placeholder="Frente a..., portón..., piso..."></label>
+          <div class="field field-wide map-field"><label for="mapsUrl">Ubicación de entrega en Maps</label><div class="map-actions"><input name="mapsUrl" id="mapsUrl" placeholder="Pega un enlace de Google Maps"><button type="button" class="soft-button" id="useLocation">Usar mi ubicación</button><button type="button" class="soft-button" id="openMap">Abrir Maps ↗</button></div><small id="locationStatus">Usa tu ubicación solo si el pedido se entregará donde estás ahora.</small></div>
+        </div></details>
+        <details class="checkout-extras"><summary>Agregar dedicatoria o indicaciones <span>(opcional)</span></summary><div class="form-grid">
+          <label class="field field-wide"><span>Dedicatoria</span><textarea name="dedication" rows="3" maxlength="300" placeholder="El mensaje de su tarjeta..."></textarea></label>
+          <label class="field field-wide"><span>Observaciones</span><textarea name="notes" rows="2" maxlength="300" placeholder="Colores u otra indicación..."></textarea></label>
+        </div></details>
+      </fieldset>
       <div class="checkout-summary"><div><span>Productos</span><strong id="checkoutSubtotal">S/ 0.00</strong></div><div><span>Delivery</span><strong id="checkoutDelivery">Por confirmar</strong></div><div class="total"><span>Total estimado</span><strong id="checkoutTotal">S/ 0.00</strong></div><small id="deliveryNote">El costo final de delivery puede requerir confirmación según la dirección.</small></div>
-      <label class="consent"><input type="checkbox" required> <span>Acepto que la separación es temporal hasta confirmar la compra por WhatsApp.</span></label>
+      <div id="checkoutFinal" hidden>
+      <label class="consent"><input id="reservationConsent" type="checkbox" required disabled> <span>Acepto que la separación es temporal hasta confirmar la compra por WhatsApp.</span></label>
       <button class="primary-button full checkout-submit" type="submit" id="reserveButton">Separar productos y continuar por WhatsApp →</button>
-      <div class="form-message" id="checkoutMessage" hidden></div>
+      <button type="button" class="text-link checkout-back" id="checkoutBack">← Volver a mis datos</button>
+      </div>
+      <div class="form-message" id="checkoutMessage" role="alert" hidden></div>
     </form>
   </section>
 
-  <button id="customWhatsApp" type="button" hidden aria-hidden="true"></button>
+  <section class="modal photo-modal" id="photoModal" role="dialog" aria-modal="true" aria-label="Fotografía ampliada" aria-hidden="true" inert><button type="button" class="close-button modal-close" data-close="photo" aria-label="Cerrar fotografía">×</button><img id="zoomImage" alt=""></section>
+  <section class="modal reservation-success" id="reservationSuccess" role="dialog" aria-modal="true" aria-labelledby="reservationTitle" aria-hidden="true" inert>
+    <button type="button" class="close-button modal-close" data-close="success" aria-label="Cerrar confirmación">×</button>
+    <span class="eyebrow">TU DETALLE ESTÁ SEPARADO</span><h2 id="reservationTitle">¡Reserva registrada!</h2><p id="reservationSummary"></p><p>Confirma el pedido y el delivery con nosotros.</p><a id="reservationWhatsApp" class="primary-button full">Continuar por WhatsApp →</a>
+  </section>
+  <a id="customWhatsApp" class="whatsapp-contact" href="https://wa.me/51956892798" target="_blank" rel="noopener" aria-label="Consultar por WhatsApp"><span aria-hidden="true">💬</span><span>¿Te ayudamos?</span></a>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="assets/config.js"></script>
