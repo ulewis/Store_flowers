@@ -295,15 +295,17 @@
       const wa=makeWhatsApp(number,result,payload);
       state.cart=[];saveCart();
       localStorage.setItem('sf_last_reservation',JSON.stringify({id:result.reserva_id,expires_at:result.expires_at||'',created_at:new Date().toISOString()}));
+      window.dispatchEvent(new CustomEvent('sf:reservation-created'));
+      closeLayer($('#checkoutModal'));
+      e.currentTarget.reset();
+      setMinDate();
+      updateCheckoutTotals();
       toast(`Reserva ${result.reserva_id} creada`);
 
       if(wa){
-        msg.hidden=false;
-        msg.innerHTML=`Reserva <strong>${escapeHtml(result.reserva_id)}</strong> creada. Abriendo WhatsApp…`;
-        setTimeout(()=>window.location.assign(wa),500);
+        setTimeout(()=>window.location.assign(wa),350);
       }else{
-        msg.hidden=false;
-        msg.innerHTML=`Reserva <strong>${escapeHtml(result.reserva_id)}</strong> registrada correctamente. Falta configurar el número de WhatsApp de la tienda.`;
+        toast(`Reserva ${result.reserva_id} registrada. Falta configurar WhatsApp.`);
       }
     }catch(err){
       msg.hidden=false;msg.textContent=err.message||'Ocurrió un problema al separar el pedido.';
