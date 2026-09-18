@@ -27,6 +27,7 @@
 
   function mount() {
     if (document.body.classList.contains('admin-body')) return;
+    if (document.querySelector('.last-reservation-banner')) return;
     const reservation = readLastReservation();
     if (!reservation) return;
 
@@ -83,4 +84,6 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();
+  window.addEventListener('pageshow', mount);
+  window.addEventListener('sf:reservation-created', mount);
 })();
