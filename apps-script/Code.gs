@@ -76,10 +76,14 @@ function releaseExpiredReservations() {
 
 function bootstrap_() {
   const now = new Date();
+  const categoryRows = rows_(SHEETS.CATEGORIES);
+  const activeCategoryIds = {};
+  const categories = categoryRows
+    .filter(c => bool_(c.activo) && inDateWindow_(c, now))
+    .map(c => { activeCategoryIds[String(c.categoria_id)] = true; return cleanRow_(c); });
   const products = rows_(SHEETS.PRODUCTS)
-    .filter(p => bool_(p.activo) && inDateWindow_(p, now))
+    .filter(p => bool_(p.activo) && inDateWindow_(p, now) && (!String(p.categoria_id || '').trim() || activeCategoryIds[String(p.categoria_id)]))
     .map(p => cleanRow_({...p, available_stock:Math.max(0, num_(p.stock_fisico) - num_(p.stock_reservado))}));
-  const categories = rows_(SHEETS.CATEGORIES).filter(c => bool_(c.activo) && inDateWindow_(c, now)).map(cleanRow_);
   const delivery = rows_(SHEETS.DELIVERY).filter(d => bool_(d.activo)).map(cleanRow_);
   return {products, categories, delivery, config:publicConfig_(), version:API_VERSION};
 }
@@ -114,6 +118,10 @@ function reserve_(p) {
     );
     if (pendingForPhone.length >= 3) throw new Error('Ya existen varias reservas pendientes con este WhatsApp. Confirma o espera que venza una antes de crear otra.');
 
+    const activeCategoryIds = {};
+    rows_(SHEETS.CATEGORIES).forEach(cat => {
+      if (bool_(cat.activo) && inDateWindow_(cat, new Date())) activeCategoryIds[String(cat.categoria_id)] = true;
+    });
     const products = rows_(SHEETS.PRODUCTS);
     const byId = {};
     products.forEach(x => byId[String(x.id)] = x);
@@ -125,7 +133,7 @@ function reserve_(p) {
 
     (p.items || []).forEach(item => {
       const pr = byId[String(item.id)];
-      if (!pr || !bool_(pr.activo) || !inDateWindow_(pr, now)) throw new Error('Uno de los productos ya no está disponible. Actualiza el catálogo.');
+      if (!pr || !bool_(pr.activo) || !inDateWindow_(pr, now) || (String(pr.categoria_id || '').trim() && !activeCategoryIds[String(pr.categoria_id)])) throw new Error('Uno de los productos ya no está disponible. Actualiza el catálogo.');
       const qty = Math.floor(num_(item.qty));
       if (qty < 1) throw new Error('La cantidad de un producto no es válida.');
       totalQty += qty;
