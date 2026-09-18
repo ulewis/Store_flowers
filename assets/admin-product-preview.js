@@ -18,16 +18,7 @@
   }
 
   async function snapshot(){
-    try{return await post('adminSnapshot');}
-    catch(e){
-      const u=new URL(cfg.API_URL);
-      u.searchParams.set('action','adminSnapshot');
-      u.searchParams.set('token',token());
-      const r=await fetch(u,{redirect:'follow'});
-      const j=await r.json();
-      if(j.ok===false)throw e;
-      return j.data||j;
-    }
+    return post('adminSnapshot');
   }
 
   function blobToBase64(blob){
