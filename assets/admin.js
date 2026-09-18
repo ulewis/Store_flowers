@@ -178,14 +178,14 @@
       if(v==='')return toast('Ingresa el costo de delivery.');
       act(()=>post('adminSetReservationDelivery',{reserva_id:id,delivery:Number(v)}),'Delivery guardado');
     });
-    $('[data-confirm-res]').forEach(b=>b.onclick=()=>{
+    $$('[data-confirm-res]').forEach(b=>b.onclick=()=>{
       const id=b.dataset.confirmRes,v=reservationDeliveryValue(id);
       if(!window.confirm(`¿Confirmar la reserva ${id}? Esto descontará el stock físico y creará el pedido.`))return;
       const payload={reserva_id:id};
       if(v!=='')payload.delivery=Number(v);
       act(()=>post('adminConfirmReservation',payload),'Pedido confirmado');
     });
-    $('[data-cancel-res]').forEach(b=>b.onclick=()=>{
+    $$('[data-cancel-res]').forEach(b=>b.onclick=()=>{
       const id=b.dataset.cancelRes;
       if(!window.confirm(`¿Cancelar la reserva ${id}? El stock reservado volverá a estar disponible.`))return;
       act(()=>post('adminCancelReservation',{reserva_id:id}),'Reserva cancelada');
@@ -204,7 +204,7 @@
       <td><div class="admin-actions"><button data-save-order="${esc(o.pedido_id)}">Guardar estado</button><button data-detail-order="${esc(o.pedido_id)}">Detalle</button></div></td>
     </tr>`);
     $('#ordersTable').innerHTML=table(['Pedido','Cliente','Entrega','Delivery','Total','Estado','Acciones'],rows);
-    $('[data-save-order]').forEach(b=>b.onclick=()=>{
+    $$('[data-save-order]').forEach(b=>b.onclick=()=>{
       const id=b.dataset.saveOrder;
       const sel=$(`[data-order-status="${CSS.escape(id)}"]`);
       if(sel.value==='CANCELADO'&&!window.confirm(`¿Marcar el pedido ${id} como CANCELADO?`))return;
