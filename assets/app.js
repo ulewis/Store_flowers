@@ -5,7 +5,7 @@
   const money = n => `${cfg.CURRENCY_SYMBOL || 'S/'} ${Number(n || 0).toFixed(2)}`;
 
   const demoData = {
-    config:{STORE_NAME:cfg.STORE_NAME||'Store Flowers',WHATSAPP_NUMBER:cfg.PUBLIC_WHATSAPP||'',RESERVATION_MINUTES:cfg.RESERVATION_MINUTES||30},
+    config:{STORE_NAME:cfg.STORE_NAME||'Magaly Detalles',WHATSAPP_NUMBER:cfg.PUBLIC_WHATSAPP||'',RESERVATION_MINUTES:cfg.RESERVATION_MINUTES||30},
     categories:[
       {categoria_id:'flores-amarillas',nombre:'Flores amarillas',emoji:'🌻',descripcion:'Detalles para el 21 de septiembre.',activo:true,orden:1},
       {categoria_id:'cumpleanos',nombre:'Cumpleaños',emoji:'🎂',descripcion:'Regalos para celebrar.',activo:true,orden:2},
@@ -83,8 +83,8 @@
       }
     }
     const cartAdjusted=reconcileCart();
-    document.title=`${state.data.config.STORE_NAME||cfg.STORE_NAME||'Store Flowers'} | Detalles para momentos especiales`;
-    $$('[data-store-name]').forEach(el=>el.textContent=state.data.config.STORE_NAME||cfg.STORE_NAME||'Store Flowers');
+    document.title=`${state.data.config.STORE_NAME||cfg.STORE_NAME||'Magaly Detalles'} | Regalos y detalles en Piura`;
+    $$('[data-store-name]').forEach(el=>el.textContent=state.data.config.STORE_NAME||cfg.STORE_NAME||'Magaly Detalles');
     renderCategories();
     renderProducts();
     renderCart();
