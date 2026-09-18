@@ -38,7 +38,7 @@ jobs:
           RESPONSE=$(curl -fsSL --retry 2 --retry-delay 2 "$API_URL?action=bootstrap")
           echo "$RESPONSE" | jq -e '
             .ok == true
-            and ((.data.version == "2026-09-17.3") or (.data.version == "2026-09-17.5"))
+            and (.data.version == "2026-09-17.5")
             and (.data.products | length) >= 4
             and (.data.products | all(
               (.id | length) > 0
