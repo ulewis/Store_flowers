@@ -79,3 +79,39 @@ test('Deep links open the product, image enlargement closes back to the detail, 
 test('Closed store blocks additions and checkout',async()=>{
   const catalog=structuredClone(fixture);catalog.config.STORE_STATUS='paused';const q=setup({catalog});await tick();assert.equal(q.$('[data-add]').disabled,true);assert.equal(q.$('#checkoutStart').disabled,true);assert.equal(q.$('#storeStatusBanner').hidden,false);q.close();
 });
+
+test('Catalogue changes from Add to a quantity stepper, respects stock, and returns to Add at zero',async()=>{
+  const q=setup();await tick();
+  assert.equal(q.$('.product-quantity').hidden,true);
+  q.click('[data-add]');
+  assert.equal(q.$('[data-add]').hidden,true);
+  assert.equal(q.$('.product-quantity').hidden,false);
+  assert.equal(q.$('.product-quantity-value').textContent,'1');
+  q.click('[data-product-plus]');q.click('[data-product-plus]');
+  assert.equal(q.$('.product-quantity-value').textContent,'3');
+  assert.equal(q.$('[data-product-plus]').disabled,true);
+  assert.equal(q.$('#cartCount').textContent,'3');
+  assert.equal(q.$('#cartSubtotal').textContent,'S/ 267.00');
+  q.click('[data-product-minus]');q.click('[data-product-minus]');q.click('[data-product-minus]');
+  assert.equal(q.cart().length,0);assert.equal(q.$('[data-add]').hidden,false);
+  assert.equal(q.$('.product-quantity').hidden,true);q.close();
+});
+test('Catalogue quantity follows restored cart, cart edits, and product customizations',async()=>{
+  const q=setup({cart:[{id:'P1',qty:2,personalization:'Para Ana'}]});await tick();
+  assert.equal(q.$('.product-quantity-value').textContent,'2');
+  q.click('[data-product-plus]');
+  assert.equal(q.cart().length,1);assert.equal(q.cart()[0].personalization,'Para Ana');
+  q.click('#cartOpen');q.click('[data-cart-minus]');
+  assert.equal(q.$('.product-quantity-value').textContent,'2');
+  q.click('[data-cart-remove]');
+  assert.equal(q.$('[data-add]').hidden,false);q.click('[data-close=cart]');
+  q.click('[data-open-product]');q.$('#modalPersonalization').value='Para Luis';q.click('#modalAdd');
+  assert.equal(q.$('.product-quantity-value').textContent,'1');q.close();
+});
+test('With different dedications, catalogue controls let the customer choose the cart line',async()=>{
+  const q=setup({cart:[{id:'P1',qty:1,personalization:'Ana'},{id:'P1',qty:1,personalization:'Luis'}]});await tick();
+  assert.equal(q.$('.product-quantity-value').textContent,'2');
+  q.click('[data-product-minus]');
+  assert.equal(q.$('#cartDrawer').classList.contains('open'),true);
+  assert.deepEqual(q.cart().map(i=>i.qty),[1,1]);q.close();
+});

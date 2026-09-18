@@ -126,14 +126,41 @@
     $('#productGrid').innerHTML=products.map(p=>{
       const stock=stockFor(p),image=imagesFor(p)[0],category=categoryById(p.categoria_id);
       const media=image?`<img loading="lazy" decoding="async" src="${escapeAttr(image)}" alt="${escapeAttr(p.nombre)}" width="440" height="496">`:`<div class="product-fallback"><span class="emoji">${productEmoji(p)}</span><small>Fotografía próximamente</small></div>`;
-      return `<article class="product-card"><div class="product-media"><a class="product-photo-link" href="${escapeAttr(productUrl(p))}" data-open-product="${escapeAttr(p.id)}" aria-label="Ver ${escapeAttr(p.nombre)}">${media}</a>${p.etiqueta_stock?`<span class="product-badge">${escapeHtml(p.etiqueta_stock)}</span>`:''}</div><div class="product-info"><div class="product-meta">${escapeHtml(category?.nombre||'Detalle')}</div><div class="product-title-row"><h3><a href="${escapeAttr(productUrl(p))}" data-open-product="${escapeAttr(p.id)}">${escapeHtml(p.nombre)}</a></h3><div class="product-price">${money(p.precio)}</div></div><div class="product-purchase-row"><span class="stock-chip ${stock===0?'out':stock<=3?'low':''}">${stock===0?'Agotado':stock<=3?`Solo ${stock} disponibles`:'Disponible'}</span><button type="button" class="add-product" data-add="${escapeAttr(p.id)}" ${stock===0||!isOpen()?'disabled':''} aria-label="Agregar ${escapeAttr(p.nombre)}">${stock===0?'Agotado':'+ Agregar'}</button></div></div></article>`;
+      return `<article class="product-card"><div class="product-media"><a class="product-photo-link" href="${escapeAttr(productUrl(p))}" data-open-product="${escapeAttr(p.id)}" aria-label="Ver ${escapeAttr(p.nombre)}">${media}</a>${p.etiqueta_stock?`<span class="product-badge">${escapeHtml(p.etiqueta_stock)}</span>`:''}</div><div class="product-info"><div class="product-meta">${escapeHtml(category?.nombre||'Detalle')}</div><div class="product-title-row"><h3><a href="${escapeAttr(productUrl(p))}" data-open-product="${escapeAttr(p.id)}">${escapeHtml(p.nombre)}</a></h3><div class="product-price">${money(p.precio)}</div></div><div class="product-purchase-row"><span class="stock-chip ${stock===0?'out':stock<=3?'low':''}">${stock===0?'Agotado':stock<=3?`Solo ${stock} disponibles`:'Disponible'}</span><div class="product-controls" data-product-controls="${escapeAttr(p.id)}"><button type="button" class="add-product" data-add="${escapeAttr(p.id)}" ${stock===0||!isOpen()?'disabled':''} aria-label="Agregar ${escapeAttr(p.nombre)}">${stock===0?'Agotado':'+ Agregar'}</button><div class="product-quantity" hidden><small>En tu carrito</small><div class="product-stepper"><button type="button" data-product-minus="${escapeAttr(p.id)}" aria-label="Reducir cantidad de ${escapeAttr(p.nombre)}">−</button><output class="product-quantity-value" aria-label="Cantidad de ${escapeAttr(p.nombre)} en el carrito" aria-live="polite">0</output><button type="button" data-product-plus="${escapeAttr(p.id)}" aria-label="Aumentar cantidad de ${escapeAttr(p.nombre)}">+</button></div></div></div></div></div></article>`;
     }).join('');
     $('#emptyProducts').hidden=products.length>0;
     const active=categoryById(state.category);$('#activeFilter').hidden=!active;
     if(active)$('#activeFilter').textContent=`${active.nombre} · ${products.length} ${products.length===1?'detalle':'detalles'}`;
     $$('[data-open-product]').forEach(link=>link.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();openProduct(link.dataset.openProduct);});
-    $$('[data-add]').forEach(button=>button.onclick=()=>addToCart(button.dataset.add));
+    $('[data-add]').forEach(button=>button.onclick=()=>addToCart(button.dataset.add));
+    $('[data-product-minus]').forEach(button=>button.onclick=()=>changeProductQuantity(button.dataset.productMinus,-1));
+    $('[data-product-plus]').forEach(button=>button.onclick=()=>changeProductQuantity(button.dataset.productPlus,1));
+    syncProductQuantities();
     bindImageErrors($('#productGrid'));
+  }
+  function syncProductQuantities(){
+    $('[data-product-controls]').forEach(controls=>{
+      const p=productById(controls.dataset.productControls);if(!p)return;
+      const qty=cartQty(p.id),add=$('[data-add]',controls),stepper=$('.product-quantity',controls);
+      const minus=$('[data-product-minus]',controls),plus=$('[data-product-plus]',controls);
+      const focused=document.activeElement,hadFocus=controls.contains(focused);
+      add.hidden=qty>0;stepper.hidden=qty===0;
+      $('.product-quantity-value',controls).textContent=qty;
+      add.disabled=!state.apiReady||!isOpen()||stockFor(p)===0;
+      plus.disabled=!state.apiReady||!isOpen()||qty>=stockFor(p);
+      if(hadFocus){
+        if(qty===0&&focused!==add)add.focus();
+        else if(qty>0&&(focused===add||(focused===plus&&plus.disabled)))minus.focus();
+      }
+    });
+  }
+  function changeProductQuantity(id,delta){
+    const lines=state.cart.map((item,index)=>({item,index})).filter(line=>line.item.id===id);
+    if(lines.length>1){
+      openCart();toast('Elige en el carrito la dedicatoria cuya cantidad quieres cambiar.');return;
+    }
+    if(delta>0)addToCart(id,1,lines[0]?.item.personalization||'');
+    else if(lines.length)changeCart(lines[0].index,-1);
   }
   function addToCart(id,qty=1,personalization=''){
     if(!state.apiReady||!isOpen())return toast('Consulta la disponibilidad antes de agregar productos.');
@@ -152,6 +179,7 @@
     item.qty=Math.max(0,item.qty+delta);if(!item.qty)state.cart.splice(index,1);saveCart();
   }
   function renderCart(){
+    syncProductQuantities();
     $('#cartCount').textContent=state.cart.reduce((sum,item)=>sum+item.qty,0);
     if(!state.apiReady){$('#cartItems').innerHTML='<p>Consulta el catálogo para comprobar la disponibilidad de tu carrito.</p>';applyStoreStatus();return;}
     $('#cartItems').innerHTML=state.cart.length?state.cart.map((item,index)=>{

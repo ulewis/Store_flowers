@@ -87,3 +87,13 @@ body.locked .whatsapp-contact{visibility:hidden}
 }
 @media(max-width:360px){.shop-hero h1{font-size:29px}.shop-hero{grid-template-columns:1.15fr .85fr}.brand-logo{width:36px;height:36px;flex-basis:36px}.site-header .brand strong{font-size:15px}.product-tools select{max-width:115px;font-size:12px}.product-title-row h3{font-size:17px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.skeleton-card{animation:none}*,*::before,*::after{transition:none!important}}
+
+/* The catalogue reflects the same quantities as the cart. */
+.product-controls{flex-shrink:0;min-width:128px}
+.product-quantity small{display:block;margin-bottom:5px;text-align:center;font-size:12px;color:#67534a}
+.product-stepper{display:flex;align-items:center;justify-content:space-between;min-height:44px;border:1px solid #dfcec2;border-radius:999px;background:#fff;overflow:hidden}
+.product-stepper button{width:44px;min-height:44px;padding:0;border:0;background:transparent;color:#49392f;font-size:22px;line-height:1}
+.product-stepper button:hover:not(:disabled){background:#f7ece4}
+.product-stepper button:focus-visible{outline-offset:-4px;border-radius:999px}
+.product-quantity-value{min-width:30px;text-align:center;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.product-controls{width:100%;min-width:0}.product-controls .add-product{width:100%}}
