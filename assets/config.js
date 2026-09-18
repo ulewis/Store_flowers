@@ -1,5 +1,5 @@
 window.STORE_CONFIG = {
-  STORE_NAME: 'Store Flowers',
+  STORE_NAME: 'Magaly Detalles',
   API_URL: 'https://script.google.com/macros/s/AKfycbxeCTlWZKZZxjSFJ75KdSBTDmz8plM10JgcFmdT2drDLWgLTCI5XBHE5MoicqBs_5YD/exec',
   PUBLIC_WHATSAPP: '51956892798',
   RESERVATION_MINUTES: 30,
