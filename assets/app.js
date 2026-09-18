@@ -132,14 +132,14 @@
     const active=categoryById(state.category);$('#activeFilter').hidden=!active;
     if(active)$('#activeFilter').textContent=`${active.nombre} · ${products.length} ${products.length===1?'detalle':'detalles'}`;
     $$('[data-open-product]').forEach(link=>link.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();openProduct(link.dataset.openProduct);});
-    $('[data-add]').forEach(button=>button.onclick=()=>addToCart(button.dataset.add));
-    $('[data-product-minus]').forEach(button=>button.onclick=()=>changeProductQuantity(button.dataset.productMinus,-1));
-    $('[data-product-plus]').forEach(button=>button.onclick=()=>changeProductQuantity(button.dataset.productPlus,1));
+    $$('[data-add]').forEach(button=>button.onclick=()=>addToCart(button.dataset.add));
+    $$('[data-product-minus]').forEach(button=>button.onclick=()=>changeProductQuantity(button.dataset.productMinus,-1));
+    $$('[data-product-plus]').forEach(button=>button.onclick=()=>changeProductQuantity(button.dataset.productPlus,1));
     syncProductQuantities();
     bindImageErrors($('#productGrid'));
   }
   function syncProductQuantities(){
-    $('[data-product-controls]').forEach(controls=>{
+    $$('[data-product-controls]').forEach(controls=>{
       const p=productById(controls.dataset.productControls);if(!p)return;
       const qty=cartQty(p.id),add=$('[data-add]',controls),stepper=$('.product-quantity',controls);
       const minus=$('[data-product-minus]',controls),plus=$('[data-product-plus]',controls);
